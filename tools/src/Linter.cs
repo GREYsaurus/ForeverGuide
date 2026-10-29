@@ -1,4 +1,4 @@
-// TBCGuide build tooling - Lua lint + manifest check.
+// ForeverGuide build tooling - Lua lint + manifest check.
 // Copyright (C) 2026 GREYsaurus (https://github.com/GREYsaurus)
 // SPDX-License-Identifier: GPL-3.0-only
 //
@@ -17,7 +17,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace TBCGuideTools
+namespace ForeverGuideTools
 {
     public sealed class LintResult
     {
@@ -39,8 +39,8 @@ namespace TBCGuideTools
             "issecurevariable","geterrorhandler","seterrorhandler","setfenv","getfenv" });
 
         static readonly HashSet<string> OwnGlobalsWrite = new HashSet<string>(new[] {
-            "TBCGuide","TBCGuideDB","TBCGuideCharDB","SLASH_TBCGUIDE1","SLASH_TBCGUIDE2","SLASH_TBCGEAR1",
-            "BINDING_HEADER_TBCGUIDE","BINDING_NAME_TBCGUIDE_DELETEJUNK","TBCGuide_DeleteCheapestJunk" });
+            "ForeverGuide","ForeverGuideDB","ForeverGuideCharDB","SLASH_FOREVERGUIDE1","SLASH_FOREVERGUIDE2","SLASH_FGEAR1",
+            "BINDING_HEADER_FOREVERGUIDE","BINDING_NAME_FOREVERGUIDE_DELETEJUNK","ForeverGuide_DeleteCheapestJunk" });
 
         public static LintResult Run(string addOnDir, string allowlistPath)
         {
@@ -83,7 +83,7 @@ namespace TBCGuideTools
                 LuaChecker chk;
                 try { chk = LuaChecker.Check(src); }
                 catch (LuaSyntaxError e) { r.Err(rel + ":" + e.Line + ": " + e.Message); continue; }
-                bool generatedData = rel.Replace('/', '\\').StartsWith("Database\\QuestieTBC", StringComparison.OrdinalIgnoreCase);
+                bool generatedData = rel.Replace('/', '\\').StartsWith("Database\\Data", StringComparison.OrdinalIgnoreCase);
                 if (generatedData) continue; // data files: syntax only
                 var reported = new HashSet<string>();
                 foreach (var g in chk.Globals)

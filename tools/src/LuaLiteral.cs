@@ -1,4 +1,4 @@
-// TBCGuide build tooling - Lua literal reader/writer.
+// ForeverGuide build tooling - Lua literal reader/writer.
 // Copyright (C) 2026 GREYsaurus (https://github.com/GREYsaurus)
 // SPDX-License-Identifier: GPL-3.0-only
 //
@@ -11,7 +11,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 
-namespace TBCGuideTools
+namespace ForeverGuideTools
 {
     public sealed class LTable
     {

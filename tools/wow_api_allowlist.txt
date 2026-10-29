@@ -1,15 +1,20 @@
-﻿# TBCGuide - client globals the add-on is allowed to reference.
+# ForeverGuide - client globals the add-on is allowed to reference.
 # SPDX-License-Identifier: GPL-3.0-only
 #
 # tools/build.ps1 lint fails on any global read that is not a Lua builtin, one of our own
 # globals, or listed here. Adding a line is a deliberate decision: note its status.
+#
+# ForeverGuide: the statuses below were written for TBC Classic 2.5.6 and are kept as history. WoW
+# Forever is built on the Retail 12.1.5 client (warcraft.wiki.gg, Patch 1.60.1/API changes), so a
+# "core" Classic global may be absent there. Every call is capability-checked in Compat/Compat.lua;
+# entries marked "forever:" were added for the Retail-era paths. NONE is verified on a Forever client.
 #
 # Status legend (from developer knowledge of the 2.5.x Classic client; NOT verified in-game):
 #   core      - present since the original 1.x/2.x API and in all Classic clients
 #   classic   - modern-API function present in the Classic (1.13+/2.5+) clients
 #   guarded   - may be missing in some builds; every call site checks it exists first
 #   optional  - provided by another add-on; always nil-checked
-# Run /tbcg debug api in the client to confirm availability.
+# Run /fguide debug api in the client to confirm availability.
 
 # --- frames / UI (core) ---
 CreateFrame
@@ -68,6 +73,15 @@ GetQuestLogLeaderBoard        # core
 GetQuestsCompleted            # guarded legacy fallback
 C_QuestLog                    # classic namespace
 C_QuestLog.GetQuestIDForLogIndex  # guarded (not on every Classic build)
+C_QuestLog.GetNumQuestLogEntries  # forever: Retail form of GetNumQuestLogEntries (guarded)
+C_QuestLog.GetInfo                # forever: Retail replacement for GetQuestLogTitle (guarded)
+C_QuestLog.GetQuestObjectives     # forever: Retail replacement for GetQuestLogLeaderBoard (guarded)
+C_QuestLog.IsComplete             # forever: guarded
+C_QuestLog.IsFailed               # forever: guarded
+C_QuestLog.SetSelectedQuest       # forever: Retail abandon sequence (guarded)
+C_QuestLog.SetAbandonQuest        # forever: guarded
+C_QuestLog.AbandonQuest           # forever: guarded; only after the player confirms
+C_QuestLog.GetMaxNumQuestsCanAccept # guarded; preferred source of the quest log cap (PH-RULES-QUESTLOG)
 
 # --- map ---
 C_Map                         # classic namespace
@@ -149,7 +163,7 @@ QuestLogFrame                     # core frame; guarded (button is skipped if mi
 # Marker.lua detects ADDON_ACTION_BLOCKED/FORBIDDEN and falls back to the secure marker bar.
 SetRaidTarget                     # core; called via Compat (pcall) and from secure macro buttons
 GetRaidTargetIndex                # core
-CombatLogGetCurrentEventInfo      # classic (1.13+/2.5+); guarded; only UNIT_DIED of units TBCGuide marked is read
+CombatLogGetCurrentEventInfo      # classic (1.13+/2.5+); guarded; only UNIT_DIED of units ForeverGuide marked is read
 UnitGUID                          # core
 strsplit                          # core string helper
 UnitIsDead                        # core
@@ -163,7 +177,7 @@ InCombatLockdown                  # core; secure frames are not shown/hidden in 
 
 # --- gear scoring (UI/GearUI.lua, Gear/Gear.lua) ---
 # GetItemStats, GetInventoryItemLink and GetCombatRating are reached through ns.Compat.Has (by name,
-# nil-guarded), so they are not listed as global reads. Run /tbcg debug api to confirm them in the client.
+# nil-guarded), so they are not listed as global reads. Run /fguide debug api to confirm them in the client.
 ItemRefTooltip                    # core frame (chat link tooltip); hooked with HookScript only
 
 # --- minimap button (UI/MinimapButton.lua) ---
@@ -229,7 +243,7 @@ SaveBindings                      # core
 GetCurrentBindingSet              # core
 GetContainerNumFreeSlots          # legacy fallback (guarded)
 PickupContainerItem               # legacy fallback (guarded)
-DeleteCursorItem                  # core; deletes only the junk item TBCGuide just picked up
+DeleteCursorItem                  # core; deletes only the junk item ForeverGuide just picked up
 ContainerFrameItemButton_OnModifiedClick # core; hooked with hooksecurefunc only
 C_AddOns                          # classic namespace (guarded)
 C_AddOns.IsAddOnLoaded

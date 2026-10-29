@@ -1,16 +1,18 @@
 # Gear scoring
 
-TBCGuide compares items with what you wear: on item tooltips, for quest rewards (ranked in chat when a quest offers a choice), and with `/tbcg gear` (also `/tbcgear`). It never equips, buys or chooses anything. Quest rewards are always picked by you.
+> **ForeverGuide:** carried over from TBCGuide 0.5.0, **off by default**. Every profile is TBC research (status inherited_unverified, PH-GEAR-WEIGHTS), and scores are labelled "TBC weights, unverified for WoW Forever". Spec detection needs talent data, which is not shipped (PH-TALENTS-SYSTEM).
+
+ForeverGuide compares items with what you wear: on item tooltips, for quest rewards (ranked in chat when a quest offers a choice), and with `/fguide gear` (also `/fgear`). It never equips, buys or chooses anything. Quest rewards are always picked by you.
 
 The stat weights come from researched sources, listed with their assumptions in [GEAR_RESEARCH.md](GEAR_RESEARCH.md). Nothing has been tested in the game client yet.
 
 ## How an item is scored
 
-1. **Profile.** One profile per class, spec, role and context, in `TBCGuide/Gear/Profiles.lua`, chosen like this:
+1. **Profile.** One profile per class, spec, role and context, in `ForeverGuide/Gear/Profiles.lua`, chosen like this:
    - Your **main talent tree** picks the spec. A Feral druid gets the cat profile unless you choose the bear profile.
    - Only profiles whose **level range** contains your level are used, so **level-70 weights are never applied to a leveling character automatically**.
    - At 70, a pre-raid profile is preferred over a raid profile when both exist (Rogue only).
-   - `/tbcg gear profile <id>` or *Next profile* on the settings page overrides this; `auto` goes back to detection. A profile made for a higher level says so.
+   - `/fguide gear profile <id>` or *Next profile* on the settings page overrides this; `auto` goes back to detection. A profile made for a higher level says so.
    - No matching profile means no score, and the tooltip says why.
 2. **Numeric profiles** (`weights`):
    - `score = sum(stat amount × weight)` over the stats the profile weights.
@@ -39,16 +41,16 @@ The stat weights come from researched sources, listed with their assumptions in 
 
 ## Settings
 
-The *Gear* page under TBCGuide in the game options has:
+The *Gear* page under ForeverGuide in the game options has:
 - on/off switches for gear scoring, tooltips, quest-reward ranking, percentages and confidence;
 - profile choice;
 - *Reset gear settings*.
 
-From chat: `/tbcg set gearTooltip off`, and the same for `gearEnabled`, `gearQuestRewards`, `gearShowPercent` and `gearShowConfidence`.
+From chat: `/fguide set gearTooltip off`, and the same for `gearEnabled`, `gearQuestRewards`, `gearShowPercent` and `gearShowConfidence`.
 
 ## Updating profiles
 
-Profiles are plain data in `TBCGuide/Gear/Profiles.lua`; no code changes are needed.
+Profiles are plain data in `ForeverGuide/Gear/Profiles.lua`; no code changes are needed.
 
 1. Record the new source in `docs/GEAR_RESEARCH.md`: URL, date, game version and phase, context, assumptions, and whether it gives numbers.
 2. Edit or add the profile. Use the stat keys listed at the top of the file, keep `sources` and `assumptions` accurate, and set `confidence` by the rules in the research doc.

@@ -1,4 +1,4 @@
--- TBCGuide - minimal World of Warcraft API mocks for headless tests (Lua 5.1)
+-- ForeverGuide - minimal World of Warcraft API mocks for headless tests (Lua 5.1)
 -- Copyright (C) 2026 GREYsaurus (https://github.com/GREYsaurus)
 -- SPDX-License-Identifier: GPL-3.0-only
 --
@@ -125,7 +125,8 @@ MOCK.timers = {}
 C_Timer = { After = function(sec, fn) table.insert(MOCK.timers, { at = MOCK.time + sec, fn = fn }) end }
 
 function GetTime() return MOCK.time end
-function GetBuildInfo() return "2.5.6", "70577", "Oct 1 2026", 20506 end
+-- Modelled on the documented WoW Forever beta (1.60.1, TOC 16001, Retail 12.1.5 base). A model, not the client.
+function GetBuildInfo() return "1.60.1", "70291", "Oct 7 2026", MOCK.interface or 16001 end
 C_AddOns = { GetAddOnMetadata = function(_, field) if field == "Version" then return "test" end end, IsAddOnLoaded = function() return false end }
 
 function UnitRace() return MOCK.player.race, MOCK.player.race end
@@ -142,17 +143,50 @@ function GetSubZoneText() return "" end
 function GetBindLocation() return MOCK.bind end
 function GetPlayerFacing() return 0 end
 
-C_QuestLog = { IsQuestFlaggedCompleted = function(id) return MOCK.completed[id] == true end }
-function GetNumQuestLogEntries() return #MOCK.questLog, #MOCK.questLog end
-function GetQuestLogTitle(i)
-    local q = MOCK.questLog[i]
-    if not q then return nil end
-    return q.title, 1, nil, false, false, q.complete and 1 or nil, nil, q.id
+-- Quest log: Retail-style C_QuestLog by default (Forever's 12.1.5 base has no GetQuestLogTitle).
+-- MOCK.useLegacyQuestLog() installs the Classic globals instead, to test the Compat fallback.
+local function logIndexOf(id)
+    for i, q in ipairs(MOCK.questLog) do if q.id == id then return i end end
 end
-function GetNumQuestLeaderBoards(i) return #(MOCK.questLog[i].objectives or {}) end
-function GetQuestLogLeaderBoard(o, i)
-    local ob = MOCK.questLog[i].objectives[o]
-    return ob.text, "monster", ob.done
+C_QuestLog = {
+    IsQuestFlaggedCompleted = function(id) return MOCK.completed[id] == true end,
+    GetNumQuestLogEntries = function() return #MOCK.questLog, #MOCK.questLog end,
+    GetInfo = function(i)
+        local q = MOCK.questLog[i]
+        if not q then return nil end
+        return { title = q.title, questID = q.id, level = 1, isHeader = false, isHidden = false }
+    end,
+    GetQuestObjectives = function(id)
+        local q = MOCK.questLog[logIndexOf(id) or 0]
+        local out = {}
+        for o, ob in ipairs(q and q.objectives or {}) do out[o] = { text = ob.text, type = "monster", finished = ob.done } end
+        return out
+    end,
+    IsComplete = function(id) local q = MOCK.questLog[logIndexOf(id) or 0] return q and q.complete and true or false end,
+    IsFailed = function() return false end,
+    GetMaxNumQuestsCanAccept = function() return MOCK.questLogMax end,
+    SetSelectedQuest = function(id) MOCK.selectedLog = logIndexOf(id) end,
+    SetAbandonQuest = function() MOCK.abandonArmed = MOCK.selectedLog end,
+    AbandonQuest = function() AbandonQuest() end,
+}
+MOCK.questLogMax = 25
+
+function MOCK.useLegacyQuestLog()
+    function GetNumQuestLogEntries() return #MOCK.questLog, #MOCK.questLog end
+    function GetQuestLogTitle(i)
+        local q = MOCK.questLog[i]
+        if not q then return nil end
+        return q.title, 1, nil, false, false, q.complete and 1 or nil, nil, q.id
+    end
+    function GetNumQuestLeaderBoards(i) return #(MOCK.questLog[i].objectives or {}) end
+    function GetQuestLogLeaderBoard(o, i)
+        local ob = MOCK.questLog[i].objectives[o]
+        return ob.text, "monster", ob.done
+    end
+end
+
+function MOCK.useModernQuestLog()
+    GetNumQuestLogEntries, GetQuestLogTitle, GetNumQuestLeaderBoards, GetQuestLogLeaderBoard = nil, nil, nil, nil
 end
 
 C_Map = {

@@ -1,4 +1,4 @@
-// TBCGuide build tooling - static application of QuestieDB TBC quest corrections.
+// ForeverGuide build tooling - static application of QuestieDB TBC quest corrections.
 // Copyright (C) 2026 GREYsaurus (https://github.com/GREYsaurus)
 // SPDX-License-Identifier: GPL-3.0-only
 //
@@ -16,7 +16,7 @@ using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace TBCGuideTools
+namespace ForeverGuideTools
 {
     public sealed class CorrectionResult
     {
@@ -66,7 +66,7 @@ namespace TBCGuideTools
                 {"NONE",0},{"WARRIOR",1},{"PALADIN",2},{"HUNTER",4},{"ROGUE",8},{"PRIEST",16},{"SHAMAN",64},
                 {"MAGE",128},{"WARLOCK",256},{"DRUID",1024},{"ALL_CLASSES",1503} };
 
-            // Map-icon hints inside objective rows. TBCGuide does not export icon types, so any
+            // Map-icon hints inside objective rows. ForeverGuide does not export icon types, so any
             // stable placeholder value is fine; it only lets the surrounding data evaluate.
             var icons = new Dictionary<string, double>();
             foreach (var n in new[] { "EVENT", "INTERACT", "TALK", "OBJECT", "SLAY", "LOOT", "NODE_FISH", "NODE_HERB", "NODE_ORE", "AVAILABLE", "COMPLETE" })

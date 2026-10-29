@@ -1,0 +1,5 @@
+<Bindings>
+	<Binding name="FOREVERGUIDE_DELETEJUNK" header="FOREVERGUIDE">
+		ForeverGuide_DeleteCheapestJunk()
+	</Binding>
+</Bindings>

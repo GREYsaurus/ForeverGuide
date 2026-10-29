@@ -1,38 +1,23 @@
-# Installing TBCGuide
+# Installing ForeverGuide
 
-## Players
+**There is no release.** Release packaging stays blocked until the WoW Forever release interface number is verified
+(`docs/LAUNCH_CHECKLIST.md`, step 1). The steps below are for in-client **testing** only.
 
-1. Download `TBCGuide-<version>.zip` from the GitHub **Releases** page (https://github.com/GREYsaurus/TBCGuide/releases), or build it yourself (it lands in `dist/`). If you use GitHub's *Code > Download ZIP* instead, copy only the inner `TBCGuide` folder out of `TBCGuide-main`.
-2. Close World of Warcraft.
-3. Extract the zip so that this folder exists:
-   ```
-   World of Warcraft\_anniversary_\Interface\AddOns\TBCGuide\TBCGuide.toc
-   ```
-   The TBC Anniversary client folder is `_anniversary_`. If your install uses a different folder name (for example `_classic_`), use that client's `Interface\AddOns`.
-4. Start the game. On the character screen, open **AddOns** and make sure **TBCGuide** is enabled. If the client says it is "out of date", tick *Load out of date AddOns*.
-5. Log in. The guide window opens with a recommended guide. Type `/tbcg help` for commands.
+## Test build
 
-Optional: install **TomTom** if you want its waypoint arrow as well as the built-in one.
+1. Build: `powershell -ExecutionPolicy Bypass -File tools/build.ps1 package-test`. This writes `dist/ForeverGuide-<version>-UNVERIFIED-TEST.zip`, which contains `TEST-BUILD-NOT-A-RELEASE.txt`.
+2. Close the game.
+3. Copy the `ForeverGuide` folder (the one with `ForeverGuide.toc`) into the Forever client's AddOns folder. Third-party guides give `World of Warcraft\_forever_\Interface\AddOns\` (unconfirmed, PH-PLATFORM-ADDONFOLDER). The result must be `...\AddOns\ForeverGuide\ForeverGuide.toc`, with no extra folder level.
+4. Start the game. Under **AddOns**, tick ForeverGuide. If it is marked out of date, tick **Load out of date AddOns**, and record that in the smoke test, because it means the interface number differs.
+5. Work through `docs/SMOKE_TEST.md`.
 
-### Upgrading
+ForeverGuide can be installed next to TBCGuide: the folders, globals, slash commands and SavedVariables differ.
 
-Delete the old `Interface\AddOns\TBCGuide` folder before extracting the new one. Your progress is stored separately in `WTF\Account\<account>\SavedVariables\TBCGuide.lua` and `...\<realm>\<character>\SavedVariables\TBCGuide.lua`, so it survives upgrades.
+## From source
 
-### Uninstalling
+- Requirements: Windows PowerShell 5.1+ (the build compiles its C# tools with `Add-Type`), plus a Lua 5.1 interpreter or Python with `lupa` for tests.
+- `tools/build.ps1 all` runs guides, lint, validate, routes and report.
+- `tools/build.ps1 test` runs the headless tests.
+- `tools/build.ps1 package` builds a release zip. It refuses while blockers are open.
 
-Delete `Interface\AddOns\TBCGuide`. You can also delete the `TBCGuide.lua` files under `WTF` to remove saved progress.
-
-## Building from source (Windows)
-
-Requirements: Windows PowerShell 5.1+ (built into Windows 10/11). Nothing else: the build tools are C# compiled on the fly by PowerShell.
-
-```bash
-powershell -ExecutionPolicy Bypass -File tools/build.ps1 all
-```
-
-This compiles the guides, lints all Lua, validates the content, writes `docs/COVERAGE_REPORT.md` and produces:
-
-- `dist/TBCGuide-<version>.zip`: the installable add-on (licence and notices included)
-- `dist/TBCGuide-<version>-source.zip`: the corresponding source (guide sources, tools, tests, docs)
-
-The data import steps (`fetch`, `import-questie`, `import-client`) only need to run when refreshing the upstream data. See `docs/DATA_PIPELINE.md`.
+`tools/build.ps1 fetch`, `import-questie` and `import-client` are disabled. They pinned TBC data (`tools/upstream.json`).

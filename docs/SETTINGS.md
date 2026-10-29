@@ -1,6 +1,8 @@
 # Settings window
 
-`/tbcg options`, or left-click the minimap button, opens the TBCGuide settings window. It has two rows of tabs: **General, Guide Routing, Targeting, Leveling Tracker, Communications, Tips, Help** and **Look and Feel, Advanced Settings, Profiles**. Escape closes it. Changes apply immediately and are saved in your current profile.
+> **ForeverGuide:** carried over from TBCGuide 0.5.0. Gear scoring is now **off** by default (TBC weights). The "Expansion" description became "Content".
+
+`/fguide options`, or left-click the minimap button, opens the ForeverGuide settings window. It has two rows of tabs: **General, Guide Routing, Targeting, Leveling Tracker, Communications, Tips, Help** and **Look and Feel, Advanced Settings, Profiles**. Escape closes it. Changes apply immediately and are saved in your current profile.
 
 Above the tabs are four buttons:
 - **Guide Browser** opens the guide browser.
@@ -19,7 +21,7 @@ Options shown **greyed out** are planned and do nothing yet; hovering one says s
 
   | Option | Default | What it does |
   |---|---|---|
-  | Quest auto accept/turn in | on | Guide quests only. More options: `/tbcg automation` |
+  | Quest auto accept/turn in | on | Guide quests only. More options: `/fguide automation` |
   | Quest auto rewards | off | Takes a reward only when gear scoring shows one clear upgrade, or when your class can use none of them (then the most valuable). Otherwise you choose |
   | Trainer automation | off | Learns every spell you can afford at your class trainer; spends gold |
   | Flight Path automation | on | On a "fly to" step, takes that flight when the flight map opens |
@@ -42,7 +44,7 @@ Options shown **greyed out** are planned and do nothing yet; hovering one says s
 - *Show Group Quests*, *Maximum-speed route*, *Advance steps automatically* and *Pick a guide on first login*.
 - **Include Dungeon Quests** (on by default). Off leaves out every step tagged as a dungeon quest: its pickup, objective and turn-in.
   - **Follow-ups** that need an excluded dungeon quest are skipped too, with the reason shown, and the guide continues with the next step.
-  - **Already in your log:** a dungeon quest you have already accepted keeps its steps, and TBCGuide never abandons quests.
+  - **Already in your log:** a dungeon quest you have already accepted keeps its steps, and ForeverGuide never abandons quests.
   - **Applies immediately,** and turning it back on restores the steps without touching your progress.
   - **Tagged today:** only Horde Ashenvale *Amongst the Ruins* (Blackfathom Deeps), because it's the only guide quest that needs an instance.
 - Choosing single dungeons is planned.
@@ -57,7 +59,7 @@ Options shown **greyed out** are planned and do nothing yet; hovering one says s
   - *Enable Target Markers (Group)*.
   - Replace and clear options, and the default marker. See [RAID_MARKERS.md](RAID_MARKERS.md).
 - **Targeting Macro:**
-  - *Create Targeting Macro* keeps a "TBCGuide" macro with `/tar` lines for the current step's NPCs. Drag it to an action bar from the Macros window, General tab. It's never edited in combat.
+  - *Create Targeting Macro* keeps a "ForeverGuide" macro with `/tar` lines for the current step's NPCs. Drag it to an action bar from the Macros window, General tab. It's never edited in combat.
   - *Notify on new target* prints one chat line when a current-step NPC first comes into view.
 - **Raid Marker Bar:** shows or hides the marker bar.
 

@@ -1,5 +1,6 @@
 {
-  "_comment": "Pinned upstream inputs for the TBCGuide data pipeline. Change these deliberately, never to 'latest'. See docs/DATA_PIPELINE.md.",
+  "_comment": "Pinned upstream inputs inherited from TBCGuide. They describe TBC Classic, NOT WoW Forever, so tools/build.ps1 refuses to fetch or import them (PH-DATA-QUESTDB, PH-TALENTS-SYSTEM). Replace with verified Forever sources, then set disabled=false. See docs/DATA_PIPELINE.md.",
+  "disabled": true,
   "questiedb": {
     "repository": "https://github.com/Questie/QuestieDB",
     "commit": "7901fee2753cecb577a72c2e4b7126198e05baec",

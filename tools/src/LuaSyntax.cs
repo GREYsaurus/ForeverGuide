@@ -1,4 +1,4 @@
-// TBCGuide build tooling - Lua 5.1 syntax checker and global-usage linter.
+// ForeverGuide build tooling - Lua 5.1 syntax checker and global-usage linter.
 // Copyright (C) 2026 GREYsaurus (https://github.com/GREYsaurus)
 // SPDX-License-Identifier: GPL-3.0-only
 //
@@ -12,7 +12,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace TBCGuideTools
+namespace ForeverGuideTools
 {
     public enum TK { Name, Number, String, Op, Keyword, EOF }
 

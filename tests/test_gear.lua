@@ -1,4 +1,4 @@
--- TBCGuide - headless tests: gear scoring (profiles, engine, tooltip, quest rewards, /tbcg gear)
+-- ForeverGuide - headless tests: gear scoring (profiles, engine, tooltip, quest rewards, /fguide gear)
 -- Copyright (C) 2026 GREYsaurus (https://github.com/GREYsaurus)
 -- SPDX-License-Identifier: GPL-3.0-only
 -- Loaded by tests/run_tests.lua after boot; uses TEST.check and TEST.ns.
@@ -73,6 +73,16 @@ check(d.unscored.sockets, "sockets are reported as not scored")
 check(select(2, G:ItemData(90011)) == "uncached", "uncached item is reported, not guessed")
 local nd = G:ItemData(90012)
 check(nd and next(nd.stats) == nil, "item without stats has an empty stat list")
+
+-- ForeverGuide defaults and missing data -------------------------------------------------------------------
+check(ns.db.profile.gearEnabled == false, "gear scoring is off by default (TBC weights: PH-GEAR-WEIGHTS)")
+check(ns.GearProfiles.status == "inherited_unverified", "gear profiles are labelled inherited_unverified")
+check(G:DetectSpec("MAGE") == nil, "no spec detection without talent data (PH-TALENTS-SYSTEM)")
+ns.db.profile.gearEnabled = true
+-- TEST STUB, not WoW Forever data: tree names only, so the inherited spec-detection logic can still be exercised.
+ns.TalentTrees = { MAGE = { { name = "Arcane" }, { name = "Fire" }, { name = "Frost" } },
+                   DRUID = { { name = "Balance" }, { name = "Feral Combat" }, { name = "Restoration" } },
+                   WARRIOR = { { name = "Arms" }, { name = "Fury" }, { name = "Protection" } } }
 
 -- Profile selection ------------------------------------------------------------------------------------------
 as("WARRIOR", 30)
@@ -214,23 +224,24 @@ MOCK.tick(1)
 check(not string.find(table.concat(MOCK.printed, "\n"), "Reward comparison", 1, true), "each quest's rewards are ranked once")
 MOCK.dialog, MOCK.questChoices = nil, {}
 
--- /tbcg gear and /tbcgear ------------------------------------------------------------------------------------
+-- /fguide gear and /fgear ------------------------------------------------------------------------------------
 MOCK.printed = {}
 MOCK.bags[0][1] = { itemID = 90001, count = 1 }
 MOCK.equipped[8] = 90002
-local ok, err = pcall(SlashCmdList["TBCGUIDE"], "gear")
+local ok, err = pcall(SlashCmdList["FOREVERGUIDE"], "gear")
 out = table.concat(MOCK.printed, "\n")
-check(ok and string.find(out, "Gear profile", 1, true) and string.find(out, "Agile Boots", 1, true), "/tbcg gear lists profile and bag upgrades: " .. tostring(err))
-check(string.find(out, "Empty slots", 1, true) ~= nil, "/tbcg gear lists empty slots")
-check(SlashCmdList["TBCGEAR"] ~= nil and SLASH_TBCGEAR1 == "/tbcgear", "/tbcgear registered")
+check(ok and string.find(out, "Gear profile", 1, true) and string.find(out, "Agile Boots", 1, true), "/fguide gear lists profile and bag upgrades: " .. tostring(err))
+check(string.find(out, "Empty slots", 1, true) ~= nil, "/fguide gear lists empty slots")
+check(SlashCmdList["FGEAR"] ~= nil and SLASH_FGEAR1 == "/fgear", "/fgear registered")
 for _, c in ipairs({ "gear profiles", "gear profile auto", "gear profile rogue_combat_preraid", "gear profile nope", "gear options" }) do
-    ok, err = pcall(SlashCmdList["TBCGUIDE"], c)
-    check(ok, "/tbcg " .. c .. " -> " .. tostring(err))
+    ok, err = pcall(SlashCmdList["FOREVERGUIDE"], c)
+    check(ok, "/fguide " .. c .. " -> " .. tostring(err))
 end
-check(ns.char.gearProfile == "rogue_combat_preraid", "/tbcg gear profile <id> saves the choice")
+check(ns.char.gearProfile == "rogue_combat_preraid", "/fguide gear profile <id> saves the choice")
 GUI:ResetSettings()
 check(ns.char.gearProfile == nil and ns.db.profile.gearTooltip == true, "reset restores gear defaults")
 MOCK.bags[0][1] = nil
 
 -- Restore the default test character
 as("WARRIOR", 1)
+ns.TalentTrees = nil -- remove the test stub

@@ -1,4 +1,4 @@
-// TBCGuide build tooling - guide compiler (guides-src/*.guide -> TBCGuide/Guides/Compiled/*.lua)
+// ForeverGuide build tooling - guide compiler (guides-src/*.guide -> ForeverGuide/Guides/Compiled/*.lua)
 // Copyright (C) 2026 GREYsaurus (https://github.com/GREYsaurus)
 // SPDX-License-Identifier: GPL-3.0-only
 //
@@ -11,6 +11,11 @@
 //   * reports problems: unknown/ambiguous quests, faction or race mismatches, level mismatches,
 //     prerequisites not covered by the route, turn-ins without accepts, bad coordinates.
 // Hard problems are errors (build fails); soft ones are warnings in docs/generated.
+//
+// ForeverGuide additions (docs/GUIDE_FORMAT.md): every step needs a stable [id=...]; guides declare
+// @status; the `pending` step type records content that is not known yet and must name a placeholder
+// from ForeverGuide/Config/Placeholders.lua ([ph=PH-...]). No WoW Forever database ships, so the
+// bundled DB is empty and every quest/NPC/zone reference fails until verified data is added.
 
 using System;
 using System.Collections.Generic;
@@ -20,7 +25,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace TBCGuideTools
+namespace ForeverGuideTools
 {
     // ---------------------------------------------------------------- bundled DB reader
     public sealed class BundledDb
@@ -49,9 +54,12 @@ namespace TBCGuideTools
         public static BundledDb Load(string addOnDir)
         {
             var db = new BundledDb();
-            string dir = Path.Combine(addOnDir, "Database", "QuestieTBC");
+            // ForeverGuide: verified WoW Forever data goes in Database/Data (same format as TBCGuide's
+            // QuestieTBC files). None exists yet (PH-DATA-QUESTDB): a missing file is an empty table.
+            string dir = Path.Combine(addOnDir, "Database", "Data");
             foreach (var file in new[] { "Quests.lua", "Npcs.lua", "Objects.lua", "Items.lua" })
             {
+                if (!File.Exists(Path.Combine(dir, file))) continue;
                 foreach (var line in File.ReadLines(Path.Combine(dir, file)))
                 {
                     var m = RecordLine.Match(line);
@@ -68,7 +76,8 @@ namespace TBCGuideTools
                 }
             }
             string section = null;
-            foreach (var line in File.ReadLines(Path.Combine(dir, "Zones.lua")))
+            var zonesFile = Path.Combine(dir, "Zones.lua");
+            foreach (var line in File.Exists(zonesFile) ? File.ReadLines(zonesFile) : new string[0])
             {
                 if (line.StartsWith("Z.uiMap")) { section = "ui"; continue; }
                 if (line.StartsWith("Z.names")) { section = "names"; continue; }
@@ -155,12 +164,18 @@ namespace TBCGuideTools
         public List<int> MarkNpcs;               // resolved NPC ids the add-on may mark for this step
         public List<string> Mobs;                // grind: mob names (as spelled in the database)
         public string Location;                  // grind: where to find them (free text)
+        public string Sid;                       // stable step id from [id=...] (saved progress key)
+        public int Rev;                          // [rev=N]: bump when the objective changes (0 = default 1)
+        public string Status;                    // verified | inherited_unverified | placeholder | blocked
+        public string Ph;                        // [ph=PH-...]: placeholder registry id
+        public List<string> Supersedes;          // [supersedes=a,b]: earlier sids of the same objective
     }
 
     public sealed class CGuide
     {
-        public string Id, Name, Faction, Chapter, ZoneName, Desc, Source;
+        public string Id, Name, Faction, Chapter, ZoneName, Desc, Source, Status;
         public int Zone, MinLevel, MaxLevel;
+        public bool LevelsUnknown, ZoneUnknown;
         public bool Start;
         public List<string> Races, Classes;
         public List<KeyValuePair<string, Dictionary<string, List<string>>>> Next = new List<KeyValuePair<string, Dictionary<string, List<string>>>>();
@@ -179,13 +194,15 @@ namespace TBCGuideTools
     // ---------------------------------------------------------------- compiler
     public static class GuideCompiler
     {
-        public static readonly string[] AllianceRaces = { "Human", "Dwarf", "NightElf", "Gnome", "Draenei" };
-        public static readonly string[] HordeRaces = { "Orc", "Scourge", "Tauren", "Troll", "BloodElf" };
+        // ForeverGuide: the eight original races (PH-RACECLASS-COMBOS, inherited_unverified). Skyborne is
+        // not listed until its race token and classes are known (PH-RACE-SKYBORNE).
+        public static readonly string[] AllianceRaces = { "Human", "Dwarf", "NightElf", "Gnome" };
+        public static readonly string[] HordeRaces = { "Orc", "Scourge", "Tauren", "Troll" };
         public static readonly Dictionary<string, int> RaceBit = new Dictionary<string, int> {
-            {"Human",1},{"Orc",2},{"Dwarf",4},{"NightElf",8},{"Scourge",16},{"Tauren",32},{"Gnome",64},{"Troll",128},{"BloodElf",512},{"Draenei",1024} };
+            {"Human",1},{"Orc",2},{"Dwarf",4},{"NightElf",8},{"Scourge",16},{"Tauren",32},{"Gnome",64},{"Troll",128} };
         public static readonly Dictionary<string, int> ClassBit = new Dictionary<string, int> {
             {"WARRIOR",1},{"PALADIN",2},{"HUNTER",4},{"ROGUE",8},{"PRIEST",16},{"SHAMAN",64},{"MAGE",128},{"WARLOCK",256},{"DRUID",1024} };
-        // Classes each race can play (from Database/RaceClass.lua, CharBaseInfo build 2.5.6).
+        // Classes each race can play (keep in sync with Database/RaceClass.lua; inherited_unverified).
         public static readonly Dictionary<string, string[]> RaceClasses = new Dictionary<string, string[]> {
             {"Human", new[]{"WARRIOR","PALADIN","ROGUE","PRIEST","MAGE","WARLOCK"}},
             {"Orc", new[]{"WARRIOR","HUNTER","ROGUE","SHAMAN","WARLOCK"}},
@@ -194,26 +211,42 @@ namespace TBCGuideTools
             {"Scourge", new[]{"WARRIOR","ROGUE","PRIEST","MAGE","WARLOCK"}},
             {"Tauren", new[]{"WARRIOR","HUNTER","SHAMAN","DRUID"}},
             {"Gnome", new[]{"WARRIOR","ROGUE","MAGE","WARLOCK"}},
-            {"Troll", new[]{"WARRIOR","HUNTER","ROGUE","PRIEST","SHAMAN","MAGE"}},
-            {"BloodElf", new[]{"PALADIN","HUNTER","ROGUE","PRIEST","MAGE","WARLOCK"}},
-            {"Draenei", new[]{"WARRIOR","PALADIN","HUNTER","PRIEST","SHAMAN","MAGE"}} };
+            {"Troll", new[]{"WARRIOR","HUNTER","ROGUE","PRIEST","SHAMAN","MAGE"}} };
         static readonly Dictionary<string, string> ClassTrainerSub = new Dictionary<string, string> {
             {"WARRIOR","Warrior Trainer"},{"PALADIN","Paladin Trainer"},{"HUNTER","Hunter Trainer"},{"ROGUE","Rogue Trainer"},
             {"PRIEST","Priest Trainer"},{"SHAMAN","Shaman Trainer"},{"MAGE","Mage Trainer"},{"WARLOCK","Warlock Trainer"},{"DRUID","Druid Trainer"} };
         static readonly Dictionary<string, string> RaceAlias = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
-            {"Human","Human"},{"Dwarf","Dwarf"},{"Gnome","Gnome"},{"NightElf","NightElf"},{"Night Elf","NightElf"},{"Draenei","Draenei"},
-            {"Orc","Orc"},{"Troll","Troll"},{"Tauren","Tauren"},{"Undead","Scourge"},{"Scourge","Scourge"},{"BloodElf","BloodElf"},{"Blood Elf","BloodElf"} };
+            {"Human","Human"},{"Dwarf","Dwarf"},{"Gnome","Gnome"},{"NightElf","NightElf"},{"Night Elf","NightElf"},
+            {"Orc","Orc"},{"Troll","Troll"},{"Tauren","Tauren"},{"Undead","Scourge"},{"Scourge","Scourge"} };
 
-        const int ALLIANCE_MASK = 1101, HORDE_MASK = 690;
+        const int ALLIANCE_MASK = 77, HORDE_MASK = 178;
+        // Documented level cap (warcraft.wiki.gg), not observed in a client: PH-RULES-LEVELCAP.
+        public const int LevelCap = 60;
+        public static readonly string[] Statuses = { "verified", "inherited_unverified", "placeholder", "blocked" };
+        static readonly Regex SidPattern = new Regex(@"^[A-Za-z0-9_.:-]{1,64}$");
+        static HashSet<string> placeholderIds = new HashSet<string>();
+
+        // Placeholder ids defined in ForeverGuide/Config/Placeholders.lua.
+        public static HashSet<string> LoadPlaceholderIds(string addOnDir)
+        {
+            var ids = new HashSet<string>();
+            var f = Path.Combine(addOnDir, "Config", "Placeholders.lua");
+            if (File.Exists(f))
+                foreach (Match m in Regex.Matches(File.ReadAllText(f), @"\{\s*id\s*=\s*""(PH-[A-Z0-9-]+)"""))
+                    ids.Add(m.Groups[1].Value);
+            return ids;
+        }
+        static bool IsPendingStatus(string s) { return s == "placeholder" || s == "blocked"; }
         const int FLAG_TRAINER = 16, FLAG_FLIGHT = 8192, FLAG_INN = 65536;
 
         static readonly HashSet<string> Verbs = new HashSet<string>(new[] {
-            "accept","turnin","complete","goto","note","train","fp","fly","hs","bind","level","travel","guide","talk","buy","use","collect","grind" });
+            "accept","turnin","complete","goto","note","train","fp","fly","hs","bind","level","travel","guide","talk","buy","use","collect","grind","pending" });
 
         public static CompileResult CompileAll(string srcDir, string addOnDir, bool write = true)
         {
             var res = new CompileResult();
             res.Db = BundledDb.Load(addOnDir);
+            placeholderIds = LoadPlaceholderIds(addOnDir);
             var files = Directory.Exists(srcDir)
                 ? Directory.GetFiles(srcDir, "*.guide", SearchOption.AllDirectories).OrderBy(f => f, StringComparer.Ordinal).ToList()
                 : new List<string>();
@@ -277,17 +310,22 @@ namespace TBCGuideTools
                         case "races": g.Races = ParseRaces(val, where, res); break;
                         case "classes": g.Classes = ParseClasses(val, where, res); break;
                         case "levels":
+                            if (val == "?") { g.LevelsUnknown = true; break; }
                             var lm = Regex.Match(val, @"^(\d+)\s*-\s*(\d+)$");
-                            if (!lm.Success) { res.Errors.Add(where + ": @levels must be like 1-10"); break; }
+                            if (!lm.Success) { res.Errors.Add(where + ": @levels must be like 1-10 (or ? when unknown)"); break; }
                             g.MinLevel = int.Parse(lm.Groups[1].Value); g.MaxLevel = int.Parse(lm.Groups[2].Value);
-                            if (g.MinLevel < 1 || g.MaxLevel > 70 || g.MinLevel > g.MaxLevel) res.Errors.Add(where + ": invalid level range");
+                            if (g.MinLevel < 1 || g.MaxLevel > LevelCap || g.MinLevel > g.MaxLevel) res.Errors.Add(where + ": invalid level range");
                             break;
+                        case "status":
+                            if (!Statuses.Contains(val)) res.Errors.Add(where + ": @status must be one of " + string.Join(", ", Statuses));
+                            g.Status = val; break;
                         case "zone":
+                            if (val == "?") { g.ZoneUnknown = true; break; }
                             int zid;
                             if (!res.Db.ZoneByName.TryGetValue(val, out zid)) res.Errors.Add(where + ": unknown zone '" + val + "'");
                             g.Zone = zid; g.ZoneName = val; lz = zid; break;
                         case "chapter":
-                            if (val != "Azeroth" && val != "Outland") res.Errors.Add(where + ": chapter must be Azeroth or Outland");
+                            if (val != "Azeroth") res.Errors.Add(where + ": chapter must be Azeroth");
                             g.Chapter = val; break;
                         case "start": g.Start = true; break;
                         case "desc": g.Desc = string.IsNullOrEmpty(g.Desc) ? val : g.Desc + " " + val; break;
@@ -316,7 +354,15 @@ namespace TBCGuideTools
         {
             if (string.IsNullOrEmpty(g.Name)) res.Errors.Add(g.Id + ": missing @name");
             if (g.Faction == null) res.Errors.Add(g.Id + ": missing @faction");
-            if (g.MaxLevel == 0) res.Errors.Add(g.Id + ": missing @levels");
+            if (g.Status == null) res.Errors.Add(g.Id + ": missing @status");
+            bool pendingGuide = IsPendingStatus(g.Status);
+            if (g.MaxLevel == 0 && !g.LevelsUnknown) res.Errors.Add(g.Id + ": missing @levels");
+            if (g.LevelsUnknown && !pendingGuide) res.Errors.Add(g.Id + ": @levels ? is only allowed in placeholder/blocked guides");
+            if (g.ZoneName == null && !g.ZoneUnknown) res.Errors.Add(g.Id + ": missing @zone");
+            if (g.ZoneUnknown && !pendingGuide) res.Errors.Add(g.Id + ": @zone ? is only allowed in placeholder/blocked guides");
+            var sids = new HashSet<string>();
+            foreach (var s in g.Steps)
+                if (s.Sid != null && !sids.Add(s.Sid)) res.Errors.Add(g.Id + ": duplicate step id " + s.Sid);
             if (g.Chapter == null) res.Errors.Add(g.Id + ": missing @chapter");
             if (g.Steps.Count == 0) res.Errors.Add(g.Id + ": no steps");
             if (g.Start && (g.Races == null || g.Races.Count == 0)) res.Errors.Add(g.Id + ": @start guide must declare @races");
@@ -412,6 +458,32 @@ namespace TBCGuideTools
             if (flags.TryGetValue("obj", out v)) s.Obj = int.Parse(v);
             if (flags.ContainsKey("unverified")) s.Verified = false;
             if (flags.TryGetValue("mark", out v)) ParseMark(v, s, where, res);
+            if (!flags.TryGetValue("id", out s.Sid) || !SidPattern.IsMatch(s.Sid ?? ""))
+                { res.Errors.Add(where + ": every step needs a stable [id=...] (letters, digits, _ . : -)"); return; }
+            if (flags.TryGetValue("rev", out v)) { int rv; if (!int.TryParse(v, out rv) || rv < 1) res.Errors.Add(where + ": rev must be a positive integer"); else s.Rev = rv; }
+            if (flags.TryGetValue("supersedes", out v)) s.Supersedes = v.Split(',').Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+            s.Status = flags.TryGetValue("status", out v) ? v : g.Status;
+            if (s.Status == null || !Statuses.Contains(s.Status)) { res.Errors.Add(where + ": bad or missing status"); return; }
+            if (flags.TryGetValue("ph", out v))
+            {
+                if (!placeholderIds.Contains(v)) res.Errors.Add(where + ": unknown placeholder id '" + v + "' (define it in Config/Placeholders.lua)");
+                s.Ph = v;
+            }
+            if (IsPendingStatus(s.Status) != (verb == "pending"))
+            {
+                res.Errors.Add(where + ": a step with status placeholder/blocked must use the `pending` type, and `pending` steps must have that status");
+                return;
+            }
+            if (verb == "pending")
+            {
+                if (s.Ph == null) { res.Errors.Add(where + ": pending step needs [ph=PH-...]"); return; }
+                if (flags.ContainsKey("at") || flags.ContainsKey("mark") || flags.ContainsKey("obj") || flags.ContainsKey("zone"))
+                    { res.Errors.Add(where + ": pending steps cannot carry at=/mark=/obj=/zone= (no unverified API data)"); return; }
+                s.Text = string.IsNullOrEmpty(arg) ? s.Text : (s.Text == null ? arg : arg + " - " + s.Text);
+                s.Verified = false;
+                g.Steps.Add(s);
+                return;
+            }
             int stepZone = g.Zone;
             if (flags.TryGetValue("zone", out v))
             {
@@ -517,7 +589,8 @@ namespace TBCGuideTools
                         // Service NPCs are faction-specific: emit one step per faction.
                         foreach (var fac in new[] { "Alliance", "Horde" })
                         {
-                            var fs = new CStep { Kind = verb, Text = s.Text, Optional = s.Optional, Place = arg, Faction = fac, Verified = s.Verified };
+                            var fs = new CStep { Kind = verb, Text = s.Text, Optional = s.Optional, Place = arg, Faction = fac, Verified = s.Verified,
+                                                 Sid = s.Sid + ":" + fac, Rev = s.Rev, Status = s.Status, Ph = s.Ph };
                             int fnpc = FindService(res.Db, verb == "fp" ? FLAG_FLIGHT : FLAG_INN, fac, stepZone, lx, ly, null);
                             if (fnpc > 0)
                             {
@@ -549,7 +622,7 @@ namespace TBCGuideTools
                     break;
                 case "level":
                     int lvl;
-                    if (!int.TryParse(arg, out lvl) || lvl < 2 || lvl > 70) { res.Errors.Add(where + ": level needs 2-70"); return; }
+                    if (!int.TryParse(arg, out lvl) || lvl < 2 || lvl > LevelCap) { res.Errors.Add(where + ": level needs 2-" + LevelCap); return; }
                     s.Level = lvl;
                     break;
                 case "grind":
@@ -1040,7 +1113,8 @@ namespace TBCGuideTools
             double sx = lx, sy = ly; int sz = lz;
             foreach (var c in classes.OrderBy(c => c))
             {
-                var s = new CStep { Kind = "train", Text = template.Text, Optional = template.Optional, Races = template.Races, Classes = new List<string> { c } };
+                var s = new CStep { Kind = "train", Text = template.Text, Optional = template.Optional, Races = template.Races, Classes = new List<string> { c },
+                                    Sid = template.Sid + ":" + c, Rev = template.Rev, Status = template.Status, Ph = template.Ph };
                 int npc = FindService(res.Db, FLAG_TRAINER, g.Faction, zone, sx, sy, ClassTrainerSub[c]);
                 if (npc > 0)
                 {
@@ -1089,6 +1163,11 @@ namespace TBCGuideTools
         public static string StepLua(CStep s)
         {
             var sb = new StringBuilder("{" + LuaWriter.Str(s.Kind));
+            sb.Append(",sid=").Append(L(s.Sid));
+            if (s.Rev > 1) sb.Append(",rev=").Append(s.Rev);
+            if (s.Status != null) sb.Append(",status=").Append(L(s.Status));
+            if (s.Ph != null) sb.Append(",ph=").Append(L(s.Ph));
+            if (s.Supersedes != null && s.Supersedes.Count > 0) sb.Append(",supersedes=").Append(LList(s.Supersedes));
             if (s.Quest > 0) sb.Append(",q=").Append(s.Quest);
             if (s.Obj > 0) sb.Append(",obj=").Append(s.Obj);
             if (s.Title != null) sb.Append(",title=").Append(L(s.Title));
@@ -1126,15 +1205,16 @@ namespace TBCGuideTools
             {
                 string fname = Regex.Replace(grp.Key.Replace(".guide", ""), @"[^A-Za-z0-9_]+", "_") + ".lua";
                 var sb = new StringBuilder();
-                sb.Append("-- TBCGuide - compiled guide data. GENERATED from guides-src/" + grp.Key + " by tools/build.ps1 guides.\n");
-                sb.Append("-- DO NOT EDIT: edit the .guide source and rebuild. Guide routes and notes are original TBCGuide content\n");
-                sb.Append("-- (GPL-3.0-only); quest ids, NPC names and coordinates were looked up in the bundled QuestieDB-derived data.\n");
+                sb.Append("-- ForeverGuide - compiled guide data. GENERATED from guides-src/" + grp.Key + " by tools/build.ps1 guides.\n");
+                sb.Append("-- DO NOT EDIT: edit the .guide source and rebuild. Guide routes and notes are original ForeverGuide content\n");
+                sb.Append("-- (GPL-3.0-only). Quest ids, NPC names and coordinates may only come from verified WoW Forever data.\n");
                 sb.Append("local _, ns = ...\n");
                 foreach (var g in grp)
                 {
                     sb.Append("ns.Guides:Register({\n");
-                    sb.Append("  id=" + L(g.Id) + ", name=" + L(g.Name) + ", faction=" + L(g.Faction) + ", chapter=" + L(g.Chapter) + ",\n");
-                    sb.Append("  minLevel=" + g.MinLevel + ", maxLevel=" + g.MaxLevel + ", zone=" + g.Zone + ", zoneName=" + L(g.ZoneName));
+                    sb.Append("  id=" + L(g.Id) + ", name=" + L(g.Name) + ", faction=" + L(g.Faction) + ", chapter=" + L(g.Chapter) + ", status=" + L(g.Status) + ",\n");
+                    sb.Append("  minLevel=" + (g.LevelsUnknown ? "nil" : g.MinLevel.ToString()) + ", maxLevel=" + (g.LevelsUnknown ? "nil" : g.MaxLevel.ToString())
+                        + ", zone=" + (g.ZoneUnknown ? "nil" : g.Zone.ToString()) + ", zoneName=" + L(g.ZoneName));
                     if (g.Start) sb.Append(", start=true");
                     if (g.Races != null) sb.Append(", races=" + LList(g.Races));
                     if (g.Classes != null) sb.Append(", classes=" + LList(g.Classes));

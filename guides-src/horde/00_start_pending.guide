@@ -1,0 +1,23 @@
+# ForeverGuide - Horde starting guide (PLACEHOLDER)
+# Copyright (C) 2026 GREYsaurus (https://github.com/GREYsaurus)
+# SPDX-License-Identifier: GPL-3.0-only
+#
+# See guides-src/alliance/00_start_pending.guide for how pending steps are replaced.
+# Races: the four original Horde races (PH-RACECLASS-COMBOS). Skyborne: PH-RACE-SKYBORNE.
+
+@guide H_Start_Pending
+@name Horde starting zones
+@faction Horde
+@races Orc,Undead,Tauren,Troll
+@levels ?
+@zone ?
+@chapter Azeroth
+@status placeholder
+@start
+@desc Starting zones for Orc, Undead, Tauren and Troll characters. The route will be written from
+@desc verified WoW Forever quest data after launch; until then each step is marked as pending.
+
+pending Starting zone, first quest giver and opening quests for your race [id=h.start.route; ph=PH-ROUTE-HORDE-START]
+pending Class trainer and level-up training in the starting area [id=h.start.trainer; ph=PH-ROUTE-HORDE-START]
+pending Hearthstone bind, flight path and the way out of the starting area [id=h.start.travel; ph=PH-ROUTE-TRAVEL]
+pending Next leveling zone and its level range [id=h.start.next; ph=PH-ROUTE-LEVELING]

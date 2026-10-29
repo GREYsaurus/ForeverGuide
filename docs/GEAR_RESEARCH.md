@@ -1,6 +1,8 @@
 # Gear scoring: research record
 
-Research for TBCGuide's gear scoring (Step B). All pages were read on **2026-10-28** unless noted. This file records where every number and priority came from, what each source assumes, and how confident we are that it applies. It is the source of truth for `TBCGuide/Gear/Profiles.lua`. How the engine uses the profiles is described in [GEAR_SCORING.md](GEAR_SCORING.md).
+> **ForeverGuide:** this is TBCGuide's research record, kept unchanged because `Gear/Profiles.lua` still carries these TBC numbers. None of it was researched for WoW Forever. Licensing of the copied numbers is open: see `THIRD_PARTY_LICENSES.md` §2.
+
+Research for TBCGuide's gear scoring (Step B). All pages were read on **2026-10-28** unless noted. This file records where every number and priority came from, what each source assumes, and how confident we are that it applies. It is the source of truth for `ForeverGuide/Gear/Profiles.lua`. How the engine uses the profiles is described in [GEAR_SCORING.md](GEAR_SCORING.md).
 
 Nothing here has been checked in the game client. Confidence describes the **evidence**, not in-game accuracy.
 

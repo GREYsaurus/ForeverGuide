@@ -1,8 +1,8 @@
-// TBCGuide build tooling - route optimization model / audit (tools/build.ps1 routes).
+// ForeverGuide build tooling - route optimization model / audit (tools/build.ps1 routes).
 // Copyright (C) 2026 GREYsaurus (https://github.com/GREYsaurus)
 // SPDX-License-Identifier: GPL-3.0-only
 //
-// Walks every race/class route (start guide -> @next chain -> level 70) step by step, the way a
+// Walks every race/class route (start guide -> @next chain -> level cap) step by step, the way a
 // player would, and measures what the bundled data can actually support:
 //   * correctness  - prerequisite ORDER (a prerequisite turned in later on the same route is an
 //                    impossible order => error), complete/turn-in before accept, quest log over
@@ -27,7 +27,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 
-namespace TBCGuideTools
+namespace ForeverGuideTools
 {
     public sealed class GuideMetrics
     {
@@ -57,7 +57,8 @@ namespace TBCGuideTools
 
     public static class RouteAnalyzer
     {
-        const int LogCap = 25;          // TBC quest log size
+        // ForeverGuide: quest log capacity is unknown (PH-RULES-QUESTLOG); 0 disables the cap check until verified.
+        const int LogCap = 0;
         const int LogWarn = 22;
         const double HubRadius = 3.5;   // map percent: steps closer than this are "the same place"
 
@@ -180,8 +181,8 @@ namespace TBCGuideTools
                     }
                 }
                 a.MaxLog[key] = peak; a.MaxLogAt[key] = peakAt;
-                if (peak > LogCap) a.Errors.Add(key + ": quest log would hold " + peak + " quests (cap " + LogCap + ") at " + peakAt);
-                else if (peak > LogWarn) a.Warnings.Add(key + ": quest log peaks at " + peak + "/" + LogCap + " at " + peakAt);
+                if (LogCap > 0 && peak > LogCap) a.Errors.Add(key + ": quest log would hold " + peak + " quests (cap " + LogCap + ") at " + peakAt);
+                else if (LogCap > 0 && peak > LogWarn) a.Warnings.Add(key + ": quest log peaks at " + peak + "/" + LogCap + " at " + peakAt);
                 foreach (var kv in log)
                 {
                     if (abandonedSeen.Add(kv.Value + "#" + kv.Key))

@@ -1,4 +1,4 @@
--- TBCGuide - headless tests for junk selling and quest automation (loaded by run_tests.lua)
+-- ForeverGuide - headless tests for junk selling and quest automation (loaded by run_tests.lua)
 -- Copyright (C) 2026 GREYsaurus (https://github.com/GREYsaurus)
 -- SPDX-License-Identifier: GPL-3.0-only
 --
@@ -31,17 +31,9 @@ local function resetCalls() MOCK.calls = {} end
 
 -- Junk selling ===================================================================================
 
--- Pick real ids from the bundled data so protection rules are tested against real records.
-local questItemQuest, questItem
-for q, r in pairs(ns.QDB.quests) do
-    local obj = r[ns.QDB.QUEST.OBJECTIVES]
-    if obj and obj.i and obj.i[1] then questItemQuest, questItem = q, obj.i[1] break end
-end
-local starterItem
-for _, r in pairs(ns.QDB.quests) do
-    local s = r[ns.QDB.QUEST.START_ITEMS]
-    if s and s[1] and s[1] ~= questItem then starterItem = s[1] break end
-end
+-- ForeverGuide: no game database ships, so the records come from the test fixture (invented ids).
+FIXTURE.installAutomation(ns)
+local questItemQuest, questItem, starterItem = FIXTURE.ITEMQ, FIXTURE.ITEM_OBJ, FIXTURE.ITEM_START
 check(questItem and starterItem, "test data: found a quest objective item and a quest-starting item")
 
 local JUNK, JUNK2, CHEAP_WHITE, NOVALUE, QUESTCLASS, PROT, CONSUMABLE, UNCACHED, QSLOT, LOCKED, FAILS =
@@ -162,7 +154,7 @@ check(V.ParseItem("|cff9d9d9d|Hitem:900001::::|h[x]|h|r") == 900001 and V.ParseI
 
 -- Quest automation ===============================================================================
 local QA = ns.QuestAuto
-ns.Engine:Load("A_Human_Elwynn", { reset = true })
+ns.Engine:Load("FX_Auto", { reset = true })
 MOCK.questLog, MOCK.completed = {}, {}
 ns.Tracker.turnedIn = {}
 ns.Tracker:Scan()
@@ -173,11 +165,11 @@ check(prof.autoAccept == true and prof.autoTurnIn == true, "quest automation on 
 -- A normal (non-escort) quest the guide still wants to accept.
 local guideQ
 for q in pairs(QA.acceptOpen) do
-    if not ns.DB.GetEscortStatus(q) and not QA.acceptOpen[q].optional then guideQ = q break end
+    if not ns.DB.GetEscortStatus(q) and not QA.acceptOpen[q].optional and not QA.acceptOpen[q].dungeon then guideQ = q break end
 end
 check(guideQ ~= nil, "found a non-escort guide quest to accept")
-local OTHER = 9 -- "The Killing Fields": Westfall, not in the Elwynn guide
-check(not QA.acceptOpen[OTHER], "test quest 9 is not in the active guide")
+local OTHER = FIXTURE.OTHER -- turned in by the NEXT fixture guide only
+check(not QA.acceptOpen[OTHER], "test quest OTHER is not in the active guide")
 
 local function offer(q, extra)
     MOCK.dialog = { questID = q, title = ns.DB.GetQuestName(q) or "?", text = "Kill things." }
@@ -187,7 +179,7 @@ end
 
 -- Gossip: the guide quest is opened, the unrelated one is not.
 resetCalls()
-MOCK.gossip = { available = { { questID = OTHER, title = "The Killing Fields" }, { questID = guideQ, title = "x" } }, active = {} }
+MOCK.gossip = { available = { { questID = OTHER, title = "FIXTURE Later Quest" }, { questID = guideQ, title = "x" } }, active = {} }
 MOCK.fire("GOSSIP_SHOW")
 check(called("select_available:" .. guideQ) and not called("select_available:" .. OTHER), "gossip: only the guide quest is selected")
 
@@ -215,7 +207,7 @@ check(not called("accept:" .. OTHER), "unrelated quest not accepted")
 -- Unconfirmed acceptance is reported as such.
 local guideQ2
 for q in pairs(QA.acceptOpen) do
-    if q ~= guideQ and not ns.DB.GetEscortStatus(q) and not QA.acceptOpen[q].optional then guideQ2 = q break end
+    if q ~= guideQ and not ns.DB.GetEscortStatus(q) and not QA.acceptOpen[q].optional and not QA.acceptOpen[q].dungeon then guideQ2 = q break end
 end
 resetCalls()
 mark = #MOCK.printed
@@ -236,27 +228,28 @@ local function escortCase(q, label, extra)
     check(printedSince(mark, "Accept it manually"), "manual acceptance explained: " .. label)
     QA.acceptOpen[q] = nil
 end
-escortCase(309, "party-accept flag (Protecting the Shipment)")
-escortCase(648, "curated list (Rescue OOX-17/TN!)")
-escortCase(2078, "curated list, no upstream flag (Gyromast's Revenge)")
+escortCase(FIXTURE.ESC_FLAG, "party-accept flag")
+escortCase(FIXTURE.ESC_LIST, "curated list")
+escortCase(FIXTURE.ESC_TEXT, "escort wording in the database objective text")
 escortCase(guideQ2, "escort wording in live quest text", { text = "Escort Bob safely to the road." })
 escortCase(99999990, "quest missing from the database")
 ns.db.escortExtra[guideQ2] = true
 escortCase(guideQ2, "user escort list")
 ns.db.escortExtra[guideQ2] = nil
-check(ns.DB.GetEscortStatus(309) and ns.DB.GetEscortStatus(4770), "known escorts classified as manual")
-check(not ns.DB.GetEscortStatus(783), "ordinary quest not classified as escort (A Threat Within)")
+check(ns.DB.GetEscortStatus(FIXTURE.ESC_FLAG) and ns.DB.GetEscortStatus(FIXTURE.ESC_LIST), "known escorts classified as manual")
+check(not ns.DB.GetEscortStatus(FIXTURE.A1), "ordinary quest not classified as escort")
 -- Escort in a gossip list: not even opened.
-QA.acceptOpen[309] = { "accept", q = 309 }
-QA.attempts[309], QA.explained = nil, {}
+local EF = FIXTURE.ESC_FLAG
+QA.acceptOpen[EF] = { "accept", q = EF }
+QA.attempts[EF], QA.explained = nil, {}
 resetCalls()
-MOCK.gossip = { available = { { questID = 309, title = "Protecting the Shipment" } }, active = {} }
+MOCK.gossip = { available = { { questID = EF, title = "FIXTURE Party Event" } }, active = {} }
 MOCK.fire("GOSSIP_SHOW")
-check(not called("select_available:309"), "escort quest in gossip list is not opened")
-QA.acceptOpen[309] = nil
+check(not called("select_available:" .. EF), "escort quest in gossip list is not opened")
+QA.acceptOpen[EF] = nil
 -- Party escort confirmation is never answered by the add-on.
 resetCalls()
-MOCK.fire("QUEST_ACCEPT_CONFIRM", "Player", "Protecting the Shipment")
+MOCK.fire("QUEST_ACCEPT_CONFIRM", "Player", "FIXTURE Party Event")
 check(#MOCK.calls == 0, "party escort confirmation left to the player")
 prof.autoAcceptOptional, prof.autoAcceptGroup = false, false
 
@@ -292,17 +285,17 @@ MOCK.fire("QUEST_GREETING")
 check(called("greeting_available:2") and not called("greeting_available:1"), "greeting: guide quest found by title")
 
 -- Turn-in ======================================================================================
--- First accept step of the guide is 783; the step after it is its turn-in.
-local TQ = 783
-table.insert(MOCK.questLog, { id = TQ, title = "A Threat Within", complete = true, objectives = {} })
+-- First accept step of the fixture guide is A1; the step after it is its turn-in.
+local TQ = FIXTURE.A1
+table.insert(MOCK.questLog, { id = TQ, title = "FIXTURE Accept One", complete = true, objectives = {} })
 ns.Tracker:Scan()
 MOCK.tick(0.5)
-check(QA.turninOpen[TQ] ~= nil, "guide has an open turn-in for 783")
+check(QA.turninOpen[TQ] ~= nil, "guide has an open turn-in for A1")
 
 -- Gossip: completed guide quest is selected before any available quest.
 QA.attempts = {}
 resetCalls()
-MOCK.gossip = { available = { { questID = guideQ2, title = "x" } }, active = { { questID = TQ, title = "A Threat Within", isComplete = true } } }
+MOCK.gossip = { available = { { questID = guideQ2, title = "x" } }, active = { { questID = TQ, title = "FIXTURE Accept One", isComplete = true } } }
 MOCK.fire("GOSSIP_SHOW")
 check(called("select_active:" .. TQ) and not called("select_available:" .. guideQ2), "gossip: turn-in first, one selection per window")
 
@@ -388,14 +381,14 @@ MOCK.gossip = { available = {}, active = {} }
 MOCK.greeting = { available = {}, active = {} }
 
 -- Orphaned quests ==============================================================================
-ns.Engine:Load("A_Human_Elwynn")
+ns.Engine:Load("FX_Auto")
 MOCK.questLog, MOCK.calls, MOCK.popups = {}, {}, {}
 local onRoute = guideQ2                       -- still an open accept step in the active guide
 local CLASSQ
 for q, r in pairs(ns.QDB.quests) do
     if (r[ns.QDB.QUEST.CLASSES] or 0) ~= 0 then CLASSQ = q break end
 end
-local logEntries = { { id = onRoute, title = "On route" }, { id = OTHER, title = "The Killing Fields" },
+local logEntries = { { id = onRoute, title = "On route" }, { id = OTHER, title = "FIXTURE Later Quest" },
                      { id = 99999991, title = "Unknown old quest" }, { id = CLASSQ, title = "Class quest" } }
 for _, e in ipairs(logEntries) do
     table.insert(MOCK.questLog, { id = e.id, title = e.title, complete = false, objectives = { { text = "a", done = false } } })
@@ -406,7 +399,7 @@ local list = ns.Orphans:Find()
 local found = {}
 for _, o in ipairs(list) do found[o.id] = o end
 check(not found[onRoute], "quest still on the route is not orphaned")
--- Quest 9 is turned in later on the human route (Westfall), so it is NOT orphaned either.
+-- OTHER is turned in by the next guide on the route (FX_Auto2), so it is NOT orphaned either.
 check(not found[OTHER], "quest turned in by a LATER guide on the route is not orphaned")
 check(found[99999991] ~= nil, "quest no guide on the route touches is orphaned")
 check(found[CLASSQ] and found[CLASSQ].special, "class quest listed but flagged as special")
@@ -434,7 +427,7 @@ ns.Tracker:Scan()
 MOCK.tick(0.5)
 
 -- Engine: an optional turn-in for a quest from an earlier guide is skipped when it is not in the log.
-local fake = { "turnin", q = 99999992, optional = true }
+local fake = { "turnin", sid = "fake", status = "verified", q = 99999992, optional = true }
 check(ns.Engine:AutoSkipReason(fake, ns.Tracker:Context()) == "not in your quest log", "optional cross-guide turn-in skipped when not in log")
 fake.optional = nil
 check(ns.Engine:AutoSkipReason(fake, ns.Tracker:Context()) == nil, "required cross-guide turn-in is never auto-skipped")
@@ -445,7 +438,7 @@ local function countNA()
     for i = 1, #ns.Engine.guide.steps do if ns.Engine.status[i] == "na" then n = n + 1 end end
     return n
 end
-ns.Engine:Load("A_Westfall")
+ns.Engine:Load("FX_Auto")
 local naBefore = countNA()
 prof.speedRoute = true
 ns.Engine:Refresh()
@@ -455,16 +448,16 @@ check(countNA() > naBefore and not optionalOpen, "speed route hides optional ste
 prof.speedRoute = false
 ns.Engine:Refresh()
 check(countNA() == naBefore, "speed route off restores optional steps")
-ns.Engine:Load("A_Human_Elwynn")
+ns.Engine:Load("FX_Auto")
 
 -- Settings / saved variables --------------------------------------------------------------------
-TBCGuideDB.protectedItems = "garbage"
-TBCGuideCharDB.junkStats = { items = "x" }
+ForeverGuideDB.protectedItems = "garbage"
+ForeverGuideCharDB.junkStats = { items = "x" }
 ns:InitSavedVariables()
 check(type(ns.db.protectedItems) == "table" and ns.char.junkStats.items == 0, "corrupt automation settings repaired")
-for _, cmd in ipairs({ "automation", "orphans", "orphans", "protect 6948", "protected", "unprotect 6948", "escort", "escort add 123",
-                       "escort remove 123", "escort remove 309", "debug escort 309", "set autoSellJunk on", "set autoSellJunk off" }) do
-    local ok, err = pcall(SlashCmdList["TBCGUIDE"], cmd)
-    check(ok, "/tbcg " .. cmd .. " -> " .. tostring(err))
+for _, cmd in ipairs({ "automation", "orphans", "orphans", "protect 99000301", "protected", "unprotect 99000301", "escort", "escort add 99000099",
+                       "escort remove 99000099", "escort remove 99000015", "debug escort 99000015", "set autoSellJunk on", "set autoSellJunk off" }) do
+    local ok, err = pcall(SlashCmdList["FOREVERGUIDE"], cmd)
+    check(ok, "/fguide " .. cmd .. " -> " .. tostring(err))
 end
 check(#ns.errors == 0, "no captured errors after automation tests: " .. table.concat(ns.errors, " | "))

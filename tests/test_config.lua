@@ -1,4 +1,4 @@
--- TBCGuide - headless tests: settings window, profiles and the features behind it
+-- ForeverGuide - headless tests: settings window, profiles and the features behind it
 -- Copyright (C) 2026 GREYsaurus (https://github.com/GREYsaurus)
 -- SPDX-License-Identifier: GPL-3.0-only
 -- Loaded by tests/run_tests.lua after boot; uses TEST.check and TEST.ns.
@@ -12,10 +12,10 @@ local function printed(pattern, from)
 end
 
 -- Window ------------------------------------------------------------------------------------------------
-check(CF.frame ~= nil and _G.TBCGuideConfigFrame == CF.frame, "settings window created at login")
+check(CF.frame ~= nil and _G.ForeverGuideConfigFrame == CF.frame, "settings window created at login")
 CF:Create()
-check(_G.TBCGuideConfigFrame == CF.frame, "created only once")
-check(string.find(CF.title:GetText(), "TBCGuide - Version", 1, true), "title shows the add-on name and version")
+check(_G.ForeverGuideConfigFrame == CF.frame, "created only once")
+check(string.find(CF.title:GetText(), "ForeverGuide - Version", 1, true), "title shows the add-on name and version")
 local ids = { "general", "guide", "targeting", "tracker", "comms", "tips", "help", "look", "advanced", "profiles" }
 local tabCount = 0
 for _ in pairs(CF.tabs) do tabCount = tabCount + 1 end
@@ -85,22 +85,22 @@ local first = P:Current()
 check(first == "Default", "existing settings live in the 'Default' profile")
 prof().scale = 1.3
 check(P:Set("Alt") and P:Current() == "Alt" and prof().scale == 1, "new profile starts from defaults")
-check(TBCGuideDB.profileKeys[ns.CharKey()] == "Alt", "the character remembers its profile")
+check(ForeverGuideDB.profileKeys[ns.CharKey()] == "Alt", "the character remembers its profile")
 check(P:CopyFrom("Default") and prof().scale == 1.3, "copy from another profile")
 prof().scale = 0.8
-check(TBCGuideDB.profiles.Default.scale == 1.3, "profiles are separate tables")
+check(ForeverGuideDB.profiles.Default.scale == 1.3, "profiles are separate tables")
 check(not P:Delete("Alt") and not P:Delete("Default"), "active and default profiles cannot be deleted")
 P:Reset()
 check(prof().scale == 1 and prof().showAllFrames == true, "reset puts the active profile back to defaults")
 check(P:Set("Default") and prof().scale == 1.3, "switching back restores the other profile's settings")
-check(P:Delete("Alt") and TBCGuideDB.profiles.Alt == nil, "unused profile deleted")
+check(P:Delete("Alt") and ForeverGuideDB.profiles.Alt == nil, "unused profile deleted")
 check(not P:Set("   "), "blank profile names are refused")
 -- a profile used by another character is reassigned when deleted
 P:Set("Shared")
 P:Set("Default")
-TBCGuideDB.profileKeys["Other - Realm"] = "Shared"
+ForeverGuideDB.profileKeys["Other - Realm"] = "Shared"
 P:Delete("Shared")
-check(TBCGuideDB.profileKeys["Other - Realm"] == "Default", "characters on a deleted profile fall back to the default")
+check(ForeverGuideDB.profileKeys["Other - Realm"] == "Default", "characters on a deleted profile fall back to the default")
 -- set as default: new characters start with it
 P:Set("Main")
 P:SetDefault()
@@ -112,15 +112,15 @@ MOCK.player.name = name
 ns:InitSavedVariables()
 check(P:Current() == "Main", "the character keeps its profile after a reload")
 P:Set("Default")
-TBCGuideDB.defaultProfile = "Default"
+ForeverGuideDB.defaultProfile = "Default"
 P:Delete("Main")
 -- migration from the single pre-0.5.0 profile
-local saved = TBCGuideDB
-TBCGuideDB = { profile = { scale = 1.4, autoMarkObjectives = true } }
+local saved = ForeverGuideDB
+ForeverGuideDB = { profile = { scale = 1.4, autoMarkObjectives = true } }
 ns:InitSavedVariables()
-check(TBCGuideDB.profile == nil and TBCGuideDB.profiles.Default.scale == 1.4 and prof().scale == 1.4, "old settings become the Default profile")
-check(rawget(ns.db, "profile") == TBCGuideDB.profiles.Default and rawget(TBCGuideDB, "profile") == nil, "the profile table is saved once (no alias)")
-TBCGuideDB = saved
+check(ForeverGuideDB.profile == nil and ForeverGuideDB.profiles.Default.scale == 1.4 and prof().scale == 1.4, "old settings become the Default profile")
+check(rawget(ns.db, "profile") == ForeverGuideDB.profiles.Default and rawget(ForeverGuideDB, "profile") == nil, "the profile table is saved once (no alias)")
+ForeverGuideDB = saved
 ns:InitSavedVariables()
 prof().scale = 1
 
@@ -152,6 +152,7 @@ check(#bought == 1 and bought[1] == "Cheap", "learns affordable spells only")
 prof().trainerAuto = false
 
 -- Guide-step automation (flight, bind, gossip) ---------------------------------------------------------
+-- ForeverGuide: NPC automation acts on verified steps only, so the stub steps say so.
 local step
 local realCurrent = ns.Engine.CurrentStep
 ns.Engine.CurrentStep = function() return step end
@@ -160,15 +161,19 @@ function NumTaxiNodes() return 2 end
 function TaxiNodeName(i) return ({ "Stormwind, Elwynn", "Sentinel Hill, Westfall" })[i] end
 function TaxiNodeGetType() return "REACHABLE" end
 function TakeTaxiNode(i) taken = i end
-step = { "fly", dest = "Sentinel Hill" }
+step = { "fly", dest = "Sentinel Hill", status = "verified" }
 A:OnTaxiMap()
 check(taken == 2, "flight path automation flies to the fly step's destination")
 taken = nil
-step = { "accept", q = 1 }
+step = { "fly", dest = "Sentinel Hill", status = "inherited_unverified" }
+A:OnTaxiMap()
+check(taken == nil, "an unverified fly step does not take a flight")
+taken = nil
+step = { "accept", q = 1, status = "verified" }
 A:OnTaxiMap()
 check(taken == nil, "no fly step: the flight map is left to you")
 MOCK.shift = true
-step = { "fly", dest = "Sentinel Hill" }
+step = { "fly", dest = "Sentinel Hill", status = "verified" }
 A:OnTaxiMap()
 check(taken == nil, "Shift held: no automatic flight")
 MOCK.shift = false
@@ -177,12 +182,12 @@ local options, selected = {}, {}
 C_GossipInfo.GetOptions = function() return options end
 C_GossipInfo.SelectOption = function(id) table.insert(selected, id) end
 options = { { name = "Make this inn your home.", type = "binder", gossipOptionID = 11 }, { name = "Trade", type = "vendor", gossipOptionID = 12 } }
-step = { "bind", place = "Goldshire" }
+step = { "bind", place = "Goldshire", status = "verified" }
 check(A:OnGossip() == "bind" and selected[1] == 11, "bind step: the innkeeper's bind option is chosen")
 local confirmed = false
 function ConfirmBinder() confirmed = true end
 check(A:OnConfirmBinder() and confirmed, "bind step: the bind is confirmed")
-step = { "accept", q = 1 }
+step = { "accept", q = 1, status = "verified" }
 confirmed = false
 check(not A:OnConfirmBinder() and not confirmed, "no bind step: the bind confirmation is left to you")
 selected = {}
@@ -202,23 +207,23 @@ check(A:OnGossip() == nil, "Skip Gossip off: nothing chosen")
 prof().skipGossip = true
 
 -- Targeting macro and notifications ------------------------------------------------------------------------
-step = { "complete", q = 790, mark = { i = 8, npcs = { 3281 } } } -- Sarkoth, as compiled from the Durotar guide
+step = { "complete", q = FIXTURE.MQ_SARK, mark = { i = 8, npcs = { FIXTURE.SARK } }, status = "verified" } -- fixture named target
 local body, n = A:MacroBody()
-check(n >= 1 and string.sub(body, 1, 12) == "/cleartarget" and string.find(body, "/tar Sarkoth", 1, true) and #body <= 255, "macro targets the step's NPCs")
+check(n >= 1 and string.sub(body, 1, 12) == "/cleartarget" and string.find(body, "/tar FIXTURE Named Target", 1, true) and #body <= 255, "macro targets the step's NPCs")
 local macros = {}
 function GetMacroIndexByName(nm) return macros[nm] and 1 or 0 end
 function GetNumMacros() return 0 end
 function CreateMacro(nm, icon, b) macros[nm] = b return 1 end
-function EditMacro(idx, nm, icon, b) macros["TBCGuide"] = b end
+function EditMacro(idx, nm, icon, b) macros["ForeverGuide"] = b end
 A.lastBody = nil
 MOCK.combat = true
 A:UpdateMacro()
-check(macros.TBCGuide == nil and A.macroPending, "no macro changes in combat (done after combat)")
+check(macros.ForeverGuide == nil and A.macroPending, "no macro changes in combat (done after combat)")
 MOCK.combat = false
 MOCK.fire("PLAYER_REGEN_ENABLED")
-check(macros.TBCGuide ~= nil and string.find(macros.TBCGuide, "Sarkoth", 1, true), "macro created after combat")
+check(macros.ForeverGuide ~= nil and string.find(macros.ForeverGuide, "FIXTURE Named Target", 1, true), "macro created after combat")
 local before = #MOCK.printed
-MOCK.units.nameplate1 = MOCK.creature(3281, 501, "Sarkoth")
+MOCK.units.nameplate1 = MOCK.creature(FIXTURE.SARK, 501, "FIXTURE Named Target")
 A.notified = {}
 A:OnUnitSeen("nameplate1")
 A:OnUnitSeen("nameplate1")
@@ -226,19 +231,21 @@ local count = 0
 for i = before + 1, #MOCK.printed do if string.find(MOCK.printed[i], "nearby", 1, true) then count = count + 1 end end
 check(count == 1, "notify on new target: once per NPC")
 MOCK.units.nameplate1 = nil
--- rare mobs
+-- rare mobs (fixture NPC with rank 4 = rare; invented id)
+local RARE = 99000406
+ns.QDB.npcs[RARE] = { "FIXTURE Rare", 5, 5, 4, FIXTURE.ZONE }
 prof().trackRares = true
 before = #MOCK.printed
-MOCK.units.nameplate2 = MOCK.creature(79, 502, "Narg the Taskmaster")
+MOCK.units.nameplate2 = MOCK.creature(RARE, 502, "FIXTURE Rare")
 A:OnUnitSeen("nameplate2")
 check(printed("Rare:", before), "rare mob alert")
 MOCK.cleu = { 0, "UNIT_DIED", false, "", "", 0, 0, MOCK.units.nameplate2.guid }
 MOCK.fire("COMBAT_LOG_EVENT_UNFILTERED")
 MOCK.cleu = nil
-check(ns.char.killedRares[79] == true, "killed rares are remembered")
+check(ns.char.killedRares[RARE] == true, "killed rares are remembered")
 prof().skipKilledRares = true
 before = #MOCK.printed
-MOCK.units.nameplate2 = MOCK.creature(79, 503, "Narg the Taskmaster")
+MOCK.units.nameplate2 = MOCK.creature(RARE, 503, "FIXTURE Rare")
 A:OnUnitSeen("nameplate2")
 check(not printed("Rare:", before), "already killed rares are skipped when asked")
 prof().trackRares, prof().skipKilledRares = false, false
@@ -331,8 +338,10 @@ prof().checkConflicts = true
 C_AddOns.IsAddOnLoaded = function() return false end
 
 -- Skip overleveled steps ------------------------------------------------------------------------------------
+-- Without the client's grey range there is no grey check at all (PH-RULES-GREYRANGE); the mock supplies one here.
 MOCK.player.race, MOCK.player.class, MOCK.player.faction = "Human", "WARRIOR", "Alliance"
-ns.Engine:Load("A_Human_Elwynn", { reset = true })
+function GetQuestGreenRange() return 8 end
+ns.Engine:Load("FX_Auto", { reset = true })
 MOCK.player.level = 40
 ns.Engine:Refresh()
 local g = ns.Engine.guide
@@ -353,7 +362,8 @@ ns.Engine:Refresh()
 check(ns.Engine.status[greyIdx] ~= "skipped", "Skip overleveled steps off: grey quests stay")
 prof().skipOverleveled = true
 MOCK.player.level = 1
-ns.Engine:Load("A_Human_Elwynn", { reset = true })
+GetQuestGreenRange = nil
+ns.Engine:Load("A_Start_Pending", { reset = true })
 
 -- Quest auto rewards ---------------------------------------------------------------------------------------
 -- (items 90001/90002 come from tests/test_gear.lua: a clear upgrade for a level-70 rogue)
@@ -391,8 +401,8 @@ local title = ns.StepText:Title({ "accept", q = 783, title = "A Threat Within" }
 check(string.find(title, "|cffff0000", 1, true), "quest colour comes from the profile")
 prof().colorQuest = { r = 1, g = 0.82, b = 0 }
 
--- Help and profile pages show TBCGuide's own commands -----------------------------------------------------
+-- Help and profile pages show ForeverGuide's own commands -----------------------------------------------------
 local helpText = ""
 for _, it in ipairs(ns.ConfigPages.help.items(CF)) do if it.text then helpText = helpText .. it.text end end
-check(string.find(helpText, "/tbcg", 1, true) and not string.find(helpText, "/rxp", 1, true), "help lists TBCGuide commands")
+check(string.find(helpText, "/fguide", 1, true) and not string.find(helpText, "/rxp", 1, true), "help lists ForeverGuide commands")
 check(#ns.errors == 0, "no captured errors after settings tests: " .. table.concat(ns.errors, " | "))

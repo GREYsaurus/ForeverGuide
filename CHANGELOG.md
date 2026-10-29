@@ -1,5 +1,30 @@
 # Changelog
 
+## ForeverGuide 0.1.0-pre (unreleased)
+
+First adaptation of TBCGuide 0.5.0 (GREYsaurus/TBCGuide@536d86c) for World of Warcraft: Forever. Everything not listed
+here behaves as in TBCGuide. The full source-to-adaptation map is `docs/PARITY.md`. Running `git diff` against the
+baseline commit shows every change.
+
+### Intentional deviations from TBCGuide
+
+- **Identity and isolation:** add-on folder and TOC `ForeverGuide`; global `ForeverGuide`; SavedVariables `ForeverGuideDB` and `ForeverGuideCharDB`; slash commands `/fguide`, `/foreverguide`, `/fgear`; internal events `FG_*`; frame, binding and macro names renamed. TBCGuide's data is never read or written, and nothing is imported (`docs/SAVED_DATA.md`).
+- **Client target:** WoW Forever, built on Retail 12.1.5. TOC interface `16001` is the documented beta value and is marked BLOCKED. `Config/Target.lua` records each value's evidence class. Level cap 60 (documented, unverified).
+- **Compat layer:** Retail `C_QuestLog` paths for the quest log scan, log size and abandon, with TBCGuide's Classic globals as fallback. No TBC defaults for quest-log capacity (25) or grey range (8).
+- **Content removed:** all 54 TBC guides, the QuestieDB-derived TBC database, TBC talent trees and builds, and the TBC escort ids. Draenei, Blood Elf and Outland are gone too.
+- **Placeholders:** new central registry `Config/Placeholders.lua` (generated into `docs/PLACEHOLDERS.md`). Two placeholder start guides (Alliance, Horde). New `pending` step type shown as "Pending WoW Forever data", which can be moved past (deferred) and is never counted as done.
+- **Content status:** guides and steps carry `verified`, `inherited_unverified`, `placeholder` or `blocked`. Only `verified` steps complete automatically or drive quest automation, waypoints, raid markers and NPC automation.
+- **Saved progress by stable step id** (`[id=...]`, required) with revisions (`[rev=]`) and renames (`[supersedes=]`), replacing TBCGuide's step-position keys. Schema migration from position-keyed data is tested, and newer schemas are never downgraded. Added `/fguide reset all`.
+- **Talent calculator:** kept, but shows "Pending WoW Forever data" (no data).
+- **Gear scoring:** kept, **off by default**, scores labelled "TBC weights, unverified for WoW Forever". **Class tips:** labelled TBC-era.
+- **Diagnostics:** `/fguide debug placeholders`, Retail API probes, and schema and placeholder counts in the summary. A chat note appears for a newer saved-data schema.
+- **Build tooling:** the compiler supports `@status`, `@levels ?`, `@zone ?`, `pending`, `[id/ph/rev/supersedes/status]`, the eight Forever races and level cap 60, and an empty database. The validator adds placeholder-safety, manifest-file and isolation checks, release blockers and the placeholder report. `package` refuses while blockers are open, and `package-test` builds an UNVERIFIED test zip. TBC data imports are disabled. `test` command added.
+- **CurseForge:** the workflow no longer defaults to the TBC game version. A new project id is required (TBCGuide's 1771321 must not be reused).
+- **Tests:** mocks model the Retail quest-log API. TBC data is replaced by labelled fixtures (`tests/fixtures/`, invented 99xxxxxx ids). New tests cover placeholder safety, migrations, isolation and content updates: 1,073 headless checks and 29 tool checks.
+- **Docs:** TBC-only research moved to `docs/tbcguide-reference/`. New docs: PARITY, COMPATIBILITY (evidence log), SAVED_DATA, LAUNCH_CHECKLIST, SMOKE_TEST, PLACEHOLDERS. NOTICE and THIRD_PARTY_LICENSES rewritten.
+
+# TBCGuide history (the original add-on)
+
 ## 0.5.0
 
 ### Fixed

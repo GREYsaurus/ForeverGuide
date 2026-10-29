@@ -1,4 +1,4 @@
--- TBCGuide - headless tests for raid markers (loaded by run_tests.lua)
+-- ForeverGuide - headless tests for raid markers (loaded by run_tests.lua)
 -- Copyright (C) 2026 GREYsaurus (https://github.com/GREYsaurus)
 -- SPDX-License-Identifier: GPL-3.0-only
 --
@@ -6,6 +6,8 @@
 -- like the real API: one icon per unit, one unit per icon, same icon again toggles it off.
 
 local check, ns = TEST.check, TEST.ns
+dofile("tests/fixtures/fixture_markers.lua")
+FIXTURE.installMarkers(ns)
 local M = ns.Marker
 local prof = ns.db.profile
 
@@ -15,7 +17,7 @@ local function printedSince(mark, pattern)
     end
     return false
 end
-local function slash(cmd) return pcall(SlashCmdList["TBCGUIDE"], cmd) end
+local function slash(cmd) return pcall(SlashCmdList["FOREVERGUIDE"], cmd) end
 local function reset()
     MOCK.units, MOCK.icons, MOCK.markCalls, MOCK.markDenied = {}, {}, 0, false
     MOCK.inRaid, MOCK.leader, MOCK.assist, MOCK.combat = false, false, false, false
@@ -34,7 +36,7 @@ local ok = slash("mark skull")
 check(ok and printedSince(mark, "no target") and MOCK.markCalls == 0, "no target: helpful message, nothing marked")
 
 -- 2) Mark the current target; 3) clear it -------------------------------------------------------
-local boar = MOCK.creature(3098, 1, "Mottled Boar")
+local boar = MOCK.creature(99000501, 1, "Mottled Boar")
 MOCK.units.target = boar
 mark = #MOCK.printed
 slash("mark skull")
@@ -69,27 +71,27 @@ check(iconOf(boar) == 1, "raid assistant can mark")
 reset()
 
 -- 5) Automatic marking from a guide step --------------------------------------------------------
--- Durotar: "complete 790 Sarkoth [mark=skull]" resolves to Sarkoth (npc 3281).
+-- FX_MarkSkull: a complete step with [mark=skull] naming FIXTURE.SARK (stands in for TBC Durotar's Sarkoth).
 local function loadStepWith(guideId, pred)
     ns.Engine:Load(guideId, { reset = true })
     local g = ns.Engine.guide
     local idx
     for i, s in ipairs(g.steps) do if pred(s) then idx = i break end end
     local p = ns.Engine.progress
-    for i = 1, idx - 1 do p.done[i] = true end
+    for i = 1, idx - 1 do p.done[g.steps[i].sid] = 1 end
     ns.Engine:Refresh()
     return idx
 end
 MOCK.questLog, MOCK.completed = {}, {}
 ns.Tracker.turnedIn = {}
 ns.Tracker:Scan()
-local idx = loadStepWith("H_OrcTroll_Durotar", function(s) return s[1] == "complete" and s.q == 790 end)
-check(ns.Engine.current == idx and M.rule and M.rule.types[3281] == 8, "guide step carries a skull rule for Sarkoth")
+local idx = loadStepWith("FX_MarkSkull", function(s) return s[1] == "complete" and s.q == FIXTURE.MQ_SARK end)
+check(ns.Engine.current == idx and M.rule and M.rule.types[FIXTURE.SARK] == 8, "guide step carries a skull rule for FixtureNamed")
 
-local sarkoth = MOCK.creature(3281, 11, "Sarkoth")
+local sarkoth = MOCK.creature(FIXTURE.SARK, 11, "FixtureNamed")
 mark = #MOCK.printed
 target(sarkoth)
-check(iconOf(sarkoth) == 8 and printedSince(mark, "Marked Sarkoth"), "guide step marks its NPC when targeted")
+check(iconOf(sarkoth) == 8 and printedSince(mark, "Marked FixtureNamed"), "guide step marks its NPC when targeted")
 
 -- not every frame: considering the same unit again makes no new call
 local calls = MOCK.markCalls
@@ -98,15 +100,15 @@ MOCK.fire("UPDATE_MOUSEOVER_UNIT")
 check(MOCK.markCalls == calls, "no repeated marking attempts for the same unit")
 
 -- 6) Same name, different NPC id: never marked
-local impostor = MOCK.creature(99001, 1, "Sarkoth")
+local impostor = MOCK.creature(99000504, 1, "FixtureNamed")
 target(impostor)
 check(iconOf(impostor) == nil, "same name but different NPC id is not marked")
-local scorpid = MOCK.creature(3124, 2, "Scorpid Worker")
+local scorpid = MOCK.creature(99000502, 2, "Scorpid Worker")
 target(scorpid)
 check(iconOf(scorpid) == nil, "unrelated mob is not marked")
 
--- one live unit holds the icon: a second Sarkoth spawn does not steal it
-local sarkoth2 = MOCK.creature(3281, 12, "Sarkoth")
+-- one live unit holds the icon: a second FixtureNamed spawn does not steal it
+local sarkoth2 = MOCK.creature(FIXTURE.SARK, 12, "FixtureNamed")
 MOCK.units.mouseover = sarkoth2
 MOCK.fire("UPDATE_MOUSEOVER_UNIT")
 MOCK.tick(0.6)
@@ -126,7 +128,7 @@ check(iconOf(sarkoth) == 2 and MOCK.markCalls == calls, "manual change is respec
 reset()
 ns.Engine:Refresh()
 M:OnStep()
-local marked = MOCK.creature(3281, 13, "Sarkoth")
+local marked = MOCK.creature(FIXTURE.SARK, 13, "FixtureNamed")
 MOCK.icons[marked.guid] = 5
 target(marked)
 check(iconOf(marked) == 5, "existing marker is not replaced by default")
@@ -137,37 +139,37 @@ check(iconOf(marked) == 8, "existing marker replaced only when markReplace is on
 prof.markReplace = false
 
 -- 9) Guide advances: our icon is removed (markClearOnAdvance), others' icons stay. Objective
--- marking is off here so the next step does not name Sarkoth again (see 9b for that case).
+-- marking is off here so the next step does not name FixtureNamed again (see 9b for that case).
 reset()
 prof.autoMarkObjectives = false
 M:OnStep()
-local s1 = MOCK.creature(3281, 21, "Sarkoth")
+local s1 = MOCK.creature(FIXTURE.SARK, 21, "FixtureNamed")
 target(s1)
 check(iconOf(s1) == 8, "marked before advancing")
-local other = MOCK.creature(3125, 3, "Clattering Scorpid")
+local other = MOCK.creature(99000503, 3, "Clattering Scorpid")
 MOCK.units.focus = other
 MOCK.icons[other.guid] = 3 -- someone else's icon
 ns.Engine:Skip()
 MOCK.tick(0.6)
 check(iconOf(s1) == nil and iconOf(other) == 3, "step advance clears only our own icon")
 -- guide abandoned / switched: same clean-up
-loadStepWith("H_OrcTroll_Durotar", function(s) return s[1] == "complete" and s.q == 790 end)
-local s2 = MOCK.creature(3281, 22, "Sarkoth")
+loadStepWith("FX_MarkSkull", function(s) return s[1] == "complete" and s.q == FIXTURE.MQ_SARK end)
+local s2 = MOCK.creature(FIXTURE.SARK, 22, "FixtureNamed")
 target(s2)
-ns.Engine:Load("A_Human_Elwynn")
+ns.Engine:Load("FX_MarkObj")
 MOCK.tick(0.6)
 check(iconOf(s2) == nil, "switching guide clears our icon")
 prof.autoMarkObjectives = true
 
 -- 9b) The next step names the same NPC with the same icon: the icon stays, no clear-and-remark
 reset()
-loadStepWith("H_OrcTroll_Durotar", function(s) return s[1] == "complete" and s.q == 790 end)
-local keep = MOCK.creature(3281, 23, "Sarkoth")
+loadStepWith("FX_MarkSkull", function(s) return s[1] == "complete" and s.q == FIXTURE.MQ_SARK end)
+local keep = MOCK.creature(FIXTURE.SARK, 23, "FixtureNamed")
 target(keep)
 local callsBefore = MOCK.markCalls
 ns.Engine:Skip()
 MOCK.tick(0.6)
-if M.rule and M.rule.types[3281] == 8 then
+if M.rule and M.rule.types[FIXTURE.SARK] == 8 then
     check(iconOf(keep) == 8 and MOCK.markCalls == callsBefore, "icon still wanted by the next step is kept, not cleared and re-set")
 else
     check(iconOf(keep) == nil, "icon no longer wanted is cleared")
@@ -176,7 +178,7 @@ end
 -- 11) Objective marking (default on): a step without [mark] marks its kill objective by NPC id
 reset()
 check(prof.autoMarkObjectives == true, "objective marking is on by default")
-local j = loadStepWith("A_Human_Elwynn", function(s)
+local j = loadStepWith("FX_MarkObj", function(s)
     local qq = s[1] == "complete" and not s.mark and s.q and ns.DB.GetQuestByID(s.q)
     return qq and qq.objectives.creatures[1] ~= nil
 end)
@@ -197,7 +199,7 @@ prof.autoMarkObjectives = true
 
 -- 12) A marked mob dies: the game drops its icon silently; the next mob of the step gets it
 reset()
-j = loadStepWith("A_Human_Elwynn", function(s)
+j = loadStepWith("FX_MarkObj", function(s)
     local qq = s[1] == "complete" and not s.mark and s.q and ns.DB.GetQuestByID(s.q)
     return qq and qq.objectives.creatures[1] ~= nil
 end)
@@ -236,36 +238,36 @@ check(iconOf(fifth) == prof.defaultMarker, "holder unseen for over a minute: ico
 
 -- 13) Several kill steps done together: each mob type gets its own icon
 reset()
--- Dun Morogh: "complete A New Threat" (troggs 707/724) is followed by "complete The Boar Hunter" (708).
+-- Dun Morogh: "complete A New Threat" (troggs FIXTURE.TROGG/FIXTURE.TROGG2) is followed by "complete The Boar Hunter" (FIXTURE.BOAR).
 -- (Durotar's makrura parts drop from more than 3 NPC types, so they are deliberately not marked.)
-loadStepWith("A_DwarfGnome_DunMorogh", function(s) return s[1] == "complete" and s.q == 170 end)
+loadStepWith("FX_MarkMulti", function(s) return s[1] == "complete" and s.q == FIXTURE.MQ_A end)
 local r = M.rule
-local troggIcon, boarIcon = r and r.types[707], r and r.types[708]
-check(troggIcon and boarIcon and troggIcon ~= boarIcon and r.types[724] == troggIcon,
+local troggIcon, boarIcon = r and r.types[FIXTURE.TROGG], r and r.types[FIXTURE.BOAR]
+check(troggIcon and boarIcon and troggIcon ~= boarIcon and r.types[FIXTURE.TROGG2] == troggIcon,
     "parallel kill steps: each mob type has its own icon; variants of one objective share it")
 check(troggIcon == prof.defaultMarker, "the first kill step uses the default marker")
 local count = 0
 for _ in pairs(r and r.icons or {}) do count = count + 1 end
 check(count <= M.MAX_TYPES, "no more than " .. M.MAX_TYPES .. " icons handed out")
-local trogg = MOCK.creature(707, 51, "Rockjaw Trogg")
-local boar = MOCK.creature(708, 52, "Small Crag Boar")
+local trogg = MOCK.creature(FIXTURE.TROGG, 51, "Rockjaw Trogg")
+local boar = MOCK.creature(FIXTURE.BOAR, 52, "Small Crag Boar")
 target(trogg)
 target(boar)
 check(iconOf(trogg) == troggIcon and iconOf(boar) == boarIcon, "both mob types marked with their own icons")
 -- the earlier step finishes: the later step's mobs stay covered, the finished one is dropped
-local idx170
-for i, s in ipairs(ns.Engine.guide.steps) do if s[1] == "complete" and s.q == 170 then idx170 = i break end end
+local idxA
+for i, s in ipairs(ns.Engine.guide.steps) do if s[1] == "complete" and s.q == FIXTURE.MQ_A then idxA = i break end end
 MOCK.units.nameplate1 = trogg -- still in view, so its icon can be removed
-ns.Engine:MarkDone(idx170)
+ns.Engine:MarkDone(idxA)
 MOCK.tick(0.6)
-check(M.rule and M.rule.types[708] == boarIcon and M.rule.types[707] == nil and iconOf(boar) == boarIcon and iconOf(trogg) == nil,
+check(M.rule and M.rule.types[FIXTURE.BOAR] == boarIcon and M.rule.types[FIXTURE.TROGG] == nil and iconOf(boar) == boarIcon and iconOf(trogg) == nil,
     "finishing one kill step keeps the other's icon and clears the finished one's")
 
 -- 14) Combat and groups: marking is allowed in combat and in a party; a raid needs leader/assist
 reset()
-loadStepWith("H_OrcTroll_Durotar", function(s) return s[1] == "complete" and s.q == 790 end)
+loadStepWith("FX_MarkSkull", function(s) return s[1] == "complete" and s.q == FIXTURE.MQ_SARK end)
 MOCK.combat = true
-local inCombat = MOCK.creature(3281, 61, "Sarkoth")
+local inCombat = MOCK.creature(FIXTURE.SARK, 61, "FixtureNamed")
 target(inCombat)
 check(iconOf(inCombat) == 8, "marks in combat (SetRaidTarget is not combat-restricted here)")
 MOCK.combat = false
@@ -273,7 +275,7 @@ reset()
 M:OnStep()
 MOCK.inRaid = true
 mark = #MOCK.printed
-local raidMob = MOCK.creature(3281, 62, "Sarkoth")
+local raidMob = MOCK.creature(FIXTURE.SARK, 62, "FixtureNamed")
 target(raidMob)
 check(iconOf(raidMob) == nil and MOCK.markCalls == 0 and printedSince(mark, "leader and assistants"), "raid without assist: not marked, explained once")
 check(M.last and string.find(M.last.reason, "not permitted", 1, true), "diagnostics record the permission refusal")
@@ -283,7 +285,7 @@ MOCK.inRaid = false
 reset()
 prof.markEnabled = false
 M:OnStep()
-local off = MOCK.creature(3281, 71, "Sarkoth")
+local off = MOCK.creature(FIXTURE.SARK, 71, "FixtureNamed")
 target(off)
 check(M.rule == nil and iconOf(off) == nil and MOCK.markCalls == 0 and string.find(M.noRuleWhy, "markEnabled", 1, true),
     "markEnabled off: nothing marked, reason recorded")
@@ -298,11 +300,11 @@ M:OnStep()
 -- 16) Diagnostics
 mark = #MOCK.printed
 local okd, errd = slash("debug marks")
-check(okd and printedSince(mark, "raid markers:") and printedSince(mark, "settings:"), "/tbcg debug marks reports rule and settings: " .. tostring(errd))
+check(okd and printedSince(mark, "raid markers:") and printedSince(mark, "settings:"), "/fguide debug marks reports rule and settings: " .. tostring(errd))
 
 -- 17) Migration: settings saved by 0.3.x/0.4.0 (objective marking off) are switched on once
-local savedDB = TBCGuideDB
-TBCGuideDB = { profile = { autoMarkObjectives = false } }
+local savedDB = ForeverGuideDB
+ForeverGuideDB = { profile = { autoMarkObjectives = false } }
 ns.migrationNote = nil
 ns:InitSavedVariables()
 check(ns.db.profile.autoMarkObjectives == true and ns.migrationNote ~= nil, "old saved setting switched on once, with a note")
@@ -310,30 +312,30 @@ ns.db.profile.autoMarkObjectives = false -- the player turns it off again
 ns.migrationNote = nil
 ns:InitSavedVariables()
 check(ns.db.profile.autoMarkObjectives == false and ns.migrationNote == nil, "the player's later choice is kept")
-TBCGuideDB = nil
+ForeverGuideDB = nil
 ns:InitSavedVariables()
 check(ns.db.profile.autoMarkObjectives == true and ns.migrationNote == nil, "new install: on by default, no note")
-TBCGuideDB = savedDB
+ForeverGuideDB = savedDB
 ns:InitSavedVariables()
 prof = ns.db.profile
 
 -- 10) Client denies / blocks marking ------------------------------------------------------------
 reset()
-loadStepWith("H_OrcTroll_Durotar", function(s) return s[1] == "complete" and s.q == 790 end)
+loadStepWith("FX_MarkSkull", function(s) return s[1] == "complete" and s.q == FIXTURE.MQ_SARK end)
 MOCK.markDenied = true
 mark = #MOCK.printed
-target(MOCK.creature(3281, 41, "Sarkoth"))
-target(MOCK.creature(3281, 42, "Sarkoth"))
-check(printedSince(mark, "Could not mark") and not printedSince(mark, "Marked Sarkoth"), "denied marking reported, never claimed")
+target(MOCK.creature(FIXTURE.SARK, 41, "FixtureNamed"))
+target(MOCK.creature(FIXTURE.SARK, 42, "FixtureNamed"))
+check(printedSince(mark, "Could not mark") and not printedSince(mark, "Marked FixtureNamed"), "denied marking reported, never claimed")
 check(M.stopped and printedSince(mark, "paused"), "automatic marking pauses after repeated failures")
 calls = MOCK.markCalls
-target(MOCK.creature(3281, 43, "Sarkoth"))
+target(MOCK.creature(FIXTURE.SARK, 43, "FixtureNamed"))
 check(MOCK.markCalls == calls, "no further attempts once paused")
 reset()
 M:OnStep()
-MOCK.fire("ADDON_ACTION_BLOCKED", "TBCGuide", "SetRaidTarget()")
+MOCK.fire("ADDON_ACTION_BLOCKED", "ForeverGuide", "SetRaidTarget()")
 calls = MOCK.markCalls
-target(MOCK.creature(3281, 44, "Sarkoth"))
+target(MOCK.creature(FIXTURE.SARK, 44, "FixtureNamed"))
 check(M.blocked and MOCK.markCalls == calls, "blocked by the client: automatic marking stops")
 M.blocked = false
 
@@ -348,7 +350,7 @@ check(prof.showMarkerBar == true, "marker bar toggles out of combat")
 slash("markbar")
 for _, cmd in ipairs({ "markers", "marker", "marker bogus", "mark bogus", "debug marks", "set autoMark off", "set autoMark on" }) do
     local okc, err = slash(cmd)
-    check(okc, "/tbcg " .. cmd .. " -> " .. tostring(err))
+    check(okc, "/fguide " .. cmd .. " -> " .. tostring(err))
 end
 ns.db.profile.defaultMarker = 42
 ns:InitSavedVariables()

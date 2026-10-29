@@ -1,0 +1,26 @@
+# ForeverGuide - Alliance starting guide (PLACEHOLDER)
+# Copyright (C) 2026 GREYsaurus (https://github.com/GREYsaurus)
+# SPDX-License-Identifier: GPL-3.0-only
+#
+# No WoW Forever route data is verified yet. Every step below is a `pending` step naming the
+# placeholder it waits for (ForeverGuide/Config/Placeholders.lua). When verified data arrives, replace
+# a pending step by real steps (new ids), or keep its id and change its type and status: a deferral
+# recorded for a pending step stops applying once the step is no longer pending.
+# Races: the four original Alliance races (PH-RACECLASS-COMBOS). Skyborne: PH-RACE-SKYBORNE.
+
+@guide A_Start_Pending
+@name Alliance starting zones
+@faction Alliance
+@races Human,Dwarf,NightElf,Gnome
+@levels ?
+@zone ?
+@chapter Azeroth
+@status placeholder
+@start
+@desc Starting zones for Human, Dwarf, Night Elf and Gnome characters. The route will be written from
+@desc verified WoW Forever quest data after launch; until then each step is marked as pending.
+
+pending Starting zone, first quest giver and opening quests for your race [id=a.start.route; ph=PH-ROUTE-ALLIANCE-START]
+pending Class trainer and level-up training in the starting area [id=a.start.trainer; ph=PH-ROUTE-ALLIANCE-START]
+pending Hearthstone bind, flight path and the way out of the starting area [id=a.start.travel; ph=PH-ROUTE-TRAVEL]
+pending Next leveling zone and its level range [id=a.start.next; ph=PH-ROUTE-LEVELING]

@@ -1,4 +1,4 @@
-// TBCGuide build tooling - authoring aid: list the quests of a zone for a faction.
+// ForeverGuide build tooling - authoring aid: list the quests of a zone for a faction.
 // Copyright (C) 2026 GREYsaurus (https://github.com/GREYsaurus)
 // SPDX-License-Identifier: GPL-3.0-only
 //
@@ -13,7 +13,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 
-namespace TBCGuideTools
+namespace ForeverGuideTools
 {
     public static class QuestLister
     {

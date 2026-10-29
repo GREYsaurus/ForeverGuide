@@ -1,15 +1,16 @@
-// TBCGuide build tooling - content validation and coverage report.
+// ForeverGuide build tooling - content validation and coverage report.
 // Copyright (C) 2026 GREYsaurus (https://github.com/GREYsaurus)
 // SPDX-License-Identifier: GPL-3.0-only
 //
 // Checks (errors fail the build; warnings are reported):
 //   * every race/class combination (Database/RaceClass.lua) has a start guide and a guide
-//     chain that reaches level 70 without level gaps, cycles or dead ends;
+//     chain that reaches the level cap without level gaps, cycles or dead ends (a chain that ends in
+//     placeholder guides is a warning: its content is pending);
 //   * guides compile (quest resolution etc. - see GuideCompiler);
-//   * every class has a leveling build and a level-70 build; every build is legal against the
-//     client talent tables (ranks, tier gating, prerequisites, 61-point budget);
-//   * manifest interface matches Config/Target.lua; saved variables declared;
-//   * bundled database sanity (counts, dangling references from guides).
+//   * talent builds, when talent data ships, are legal against it (none ships yet: PH-TALENTS-SYSTEM);
+//   * placeholder safety: pending steps carry no live data and name registered placeholders;
+//   * manifest interface matches Config/Target.lua; saved variables declared (and not TBCGuide's);
+//     every TOC/XML file exists; release blockers are listed.
 // The coverage report (docs/COVERAGE_REPORT.md) is generated from the same data, so it can never
 // claim more than the checks actually found.
 
@@ -21,7 +22,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace TBCGuideTools
+namespace ForeverGuideTools
 {
     public sealed class ValidationResult
     {
@@ -62,7 +63,9 @@ namespace TBCGuideTools
         {
             var d = new Dictionary<string, List<TalentInfo>>();
             string cls = null, tabName = null; int tab = 0;
-            foreach (var line in File.ReadAllLines(Path.Combine(addOnDir, "Talents", "Data", "TalentTrees.lua")))
+            var treesFile = Path.Combine(addOnDir, "Talents", "Data", "TalentTrees.lua");
+            if (!File.Exists(treesFile)) return d; // PH-TALENTS-SYSTEM: no data shipped
+            foreach (var line in File.ReadAllLines(treesFile))
             {
                 var cm = ClassLine.Match(line);
                 if (cm.Success) { cls = cm.Groups[1].Value; tab = 0; d[cls] = new List<TalentInfo>(); continue; }
@@ -90,7 +93,9 @@ namespace TBCGuideTools
         public static List<BuildCheck> CheckBuilds(string addOnDir, Dictionary<string, List<TalentInfo>> talents)
         {
             var result = new List<BuildCheck>();
-            foreach (var f in Directory.GetFiles(Path.Combine(addOnDir, "Talents", "Builds"), "*.lua").OrderBy(x => x))
+            var buildDir = Path.Combine(addOnDir, "Talents", "Builds");
+            if (!Directory.Exists(buildDir)) return result;
+            foreach (var f in Directory.GetFiles(buildDir, "*.lua").OrderBy(x => x))
             {
                 string text = File.ReadAllText(f);
                 var m = RegisterCall.Match(text);
@@ -227,7 +232,7 @@ namespace TBCGuideTools
                 cur = next;
             }
             r.ReachedLevel = lastMax;
-            if (lastMax < 70) r.Problems.Add("route ends at level " + lastMax);
+            if (lastMax < GuideCompiler.LevelCap) r.Problems.Add("route ends at level " + lastMax);
             return r;
         }
 
@@ -239,67 +244,96 @@ namespace TBCGuideTools
             foreach (var e in comp.Errors) v.Err("guide: " + e);
             v.Info(comp.Summary);
 
-            // Race/class coverage
+            // Race/class coverage. ForeverGuide: routes may still be placeholders, so a route that ends in
+            // a placeholder/blocked guide is reported (warning), never treated as reaching the cap.
             var combos = LoadCombos(addOnDir);
-            if (combos.Count != 52) v.Warn("expected 52 race/class combinations for TBC, found " + combos.Count);
             foreach (var c in combos)
             {
                 var r = Route(comp.Guides, c.Item1, c.Item2, c.Item3);
-                foreach (var p in r.Problems) v.Err(string.Format("route {0} {1}: {2}", c.Item1, c.Item2, p));
+                foreach (var p in r.Problems)
+                {
+                    if (p.StartsWith("route ends") && r.Guides.Any(g => g.Status == "placeholder" || g.Status == "blocked"))
+                        v.Warn(string.Format("route {0} {1}: content pending ({2})", c.Item1, c.Item2, p));
+                    else v.Err(string.Format("route {0} {1}: {2}", c.Item1, c.Item2, p));
+                }
             }
-            // Guides must not offer races/classes that cannot exist
             var legal = new HashSet<string>(combos.Select(c => c.Item1 + "/" + c.Item2));
             foreach (var g in comp.Guides)
                 if (g.Races != null && g.Classes != null)
                     foreach (var r in g.Races) foreach (var cl in g.Classes)
                             if (!legal.Contains(r + "/" + cl)) v.Warn(g.Id + " lists illegal combination " + r + "/" + cl);
-            foreach (var g in comp.Guides)
-                foreach (var s in g.Steps)
-                    if (s.Classes != null && s.Races != null)
-                        foreach (var r in s.Races) foreach (var cl in s.Classes)
-                                if (!legal.Contains(r + "/" + cl)) v.Warn(g.Id + ": step targets illegal combination " + r + "/" + cl);
-            if (!comp.Guides.Any(g => g.Chapter == "Outland")) v.Err("no Outland guides");
-            // Reachability: every guide should be on at least one route
             var used = new HashSet<string>();
             foreach (var c in combos) foreach (var g in Route(comp.Guides, c.Item1, c.Item2, c.Item3).Guides) used.Add(g.Id);
             foreach (var g in comp.Guides) if (!used.Contains(g.Id)) v.Warn("guide " + g.Id + " is not on any race/class route (reachable from the browser only)");
 
-            // Talents
+            // Placeholder safety: pending steps carry no live data; verified steps reference no placeholder.
+            var phIds = GuideCompiler.LoadPlaceholderIds(addOnDir);
+            if (phIds.Count == 0) v.Err("Config/Placeholders.lua defines no placeholders (file missing or unreadable)");
+            foreach (var g in comp.Guides)
+                foreach (var s in g.Steps)
+                {
+                    if (s.Kind == "pending" && (s.X >= 0 || s.Quest > 0 || s.MarkIcon > 0)) v.Err(g.Id + "/" + s.Sid + ": pending step carries live data");
+                    if (s.Status == "verified" && s.Ph != null) v.Err(g.Id + "/" + s.Sid + ": verified step still references " + s.Ph);
+                }
+            int pendingSteps = comp.Guides.Sum(g => g.Steps.Count(s => s.Kind == "pending"));
+            v.Info(string.Format("placeholders: {0} registered, {1} pending guide steps", phIds.Count, pendingSteps));
+
+            // Talents: optional until verified Forever data exists (PH-TALENTS-SYSTEM).
             var talents = LoadTalents(addOnDir);
-            int talentCount = talents.Values.Sum(x => x.Count);
-            if (talentCount < 500) v.Err("talent data looks incomplete (" + talentCount + " talents)");
             var builds = CheckBuilds(addOnDir, talents);
             foreach (var b in builds) foreach (var e in b.Errors) v.Err(string.Format("build {0} ({1}): {2}", b.Id, b.File, e));
-            foreach (var cls in new[] { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID" })
-            {
-                if (!builds.Any(b => b.Class == cls && b.Kind == "leveling")) v.Err(cls + " has no leveling build");
-                if (!builds.Any(b => b.Class == cls && b.Kind == "endgame")) v.Err(cls + " has no level-70 build");
-            }
             if (builds.Select(b => b.Id).Distinct().Count() != builds.Count) v.Err("duplicate build ids");
+            if (talents.Count == 0) v.Info("talents: no talent data shipped (PH-TALENTS-SYSTEM)");
 
-            // Manifest vs target config
-            string toc = File.ReadAllText(Path.Combine(addOnDir, "TBCGuide.toc"));
+            // Manifest vs target config, plus the release-packaging gate.
+            string toc = File.ReadAllText(Path.Combine(addOnDir, "ForeverGuide.toc"));
             string target = File.ReadAllText(Path.Combine(addOnDir, "Config", "Target.lua"));
             var ti = Regex.Match(toc, @"## Interface:\s*(\d+)");
-            var ci = Regex.Match(target, @"interface\s*=\s*(\d+)");
+            var ci = Regex.Match(target, @"\binterface\s*=\s*(\d+)");
             if (!ti.Success || !ci.Success || ti.Groups[1].Value != ci.Groups[1].Value)
                 v.Err("TOC interface and Config/Target.lua interface differ");
-            if (!toc.Contains("## SavedVariables: TBCGuideDB") || !toc.Contains("## SavedVariablesPerCharacter: TBCGuideCharDB"))
+            if (!toc.Contains("## SavedVariables: ForeverGuideDB") || !toc.Contains("## SavedVariablesPerCharacter: ForeverGuideCharDB"))
                 v.Err("saved variables not declared in TOC");
+            if (Regex.IsMatch(toc, @"TBCGuideDB|TBCGuideCharDB")) v.Err("TOC declares TBCGuide's SavedVariables");
+            foreach (var problem in ReleaseBlockers(addOnDir)) v.Warn("release blocked: " + problem);
+            foreach (var problem in ManifestFiles(addOnDir)) v.Err(problem);
 
-            // Database sanity
             var db = comp.Db;
-            if (db.Quests.Count < 5000) v.Err("quest database looks truncated (" + db.Quests.Count + ")");
-            int missingNames = db.Quests.Values.Count(q => !(q.Get(1) is string));
-            if (missingNames > 0) v.Err(missingNames + " quest records without names");
-            int npcMissing = 0;
-            foreach (var q in db.Quests.Values)
-                foreach (var id in BundledDb.Ids(q, BundledDb.Q_SNPC).Concat(BundledDb.Ids(q, BundledDb.Q_ENPC)))
-                    if (!db.Npcs.ContainsKey(id)) npcMissing++;
-            if (npcMissing > 50) v.Warn(npcMissing + " quest giver references point at NPCs missing from the data");
-            v.Info(string.Format("database: {0} quests, {1} npcs, {2} objects, {3} items, {4} zones", db.Quests.Count, db.Npcs.Count, db.Objects.Count, db.Items.Count, db.UiMap.Count));
-            v.Info(string.Format("talents: {0} talents, {1} builds", talentCount, builds.Count));
+            v.Info(string.Format("database: {0} quests, {1} npcs, {2} objects, {3} items, {4} zones (PH-DATA-QUESTDB)",
+                db.Quests.Count, db.Npcs.Count, db.Objects.Count, db.Items.Count, db.UiMap.Count));
             return v;
+        }
+
+        // Reasons a public release must not be built yet. Empty = no known blocker.
+        public static List<string> ReleaseBlockers(string addOnDir)
+        {
+            var l = new List<string>();
+            string toc = File.ReadAllText(Path.Combine(addOnDir, "ForeverGuide.toc"));
+            string target = File.ReadAllText(Path.Combine(addOnDir, "Config", "Target.lua"));
+            if (Regex.IsMatch(toc, @"## X-Interface-Status:\s*BLOCKED") || Regex.IsMatch(target, "interfaceStatus\\s*=\\s*\"blocked\""))
+                l.Add("TOC interface is unverified for the release client (PH-PLATFORM-INTERFACE)");
+            var ph = File.ReadAllText(Path.Combine(addOnDir, "Config", "Placeholders.lua"));
+            foreach (Match m in Regex.Matches(ph, "\\{\\s*id\\s*=\\s*\"(PH-[A-Z0-9-]+)\",\\s*area\\s*=\\s*\"packaging\",\\s*status\\s*=\\s*\"blocked\""))
+                if (m.Groups[1].Value != "PH-PLATFORM-INTERFACE") l.Add(m.Groups[1].Value + " is blocked");
+            return l;
+        }
+
+        // Every file the TOC (and the XML includes it names) loads must exist.
+        public static List<string> ManifestFiles(string addOnDir)
+        {
+            var l = new List<string>();
+            foreach (var raw in File.ReadAllLines(Path.Combine(addOnDir, "ForeverGuide.toc")))
+            {
+                var line = raw.Trim();
+                if (line.Length == 0 || line.StartsWith("#")) continue;
+                var path = Path.Combine(addOnDir, line.Replace('\\', Path.DirectorySeparatorChar));
+                if (!File.Exists(path)) { l.Add("TOC lists missing file " + line); continue; }
+                if (path.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
+                    foreach (Match m in Regex.Matches(File.ReadAllText(path), "<Script\\s+file=\"([^\"]+)\""))
+                        if (!File.Exists(Path.Combine(Path.GetDirectoryName(path), m.Groups[1].Value.Replace('\\', Path.DirectorySeparatorChar))))
+                            l.Add(line + " includes missing file " + m.Groups[1].Value);
+            }
+            return l;
         }
 
         // ---------------------------------------------------------------- report
@@ -307,79 +341,67 @@ namespace TBCGuideTools
         {
             var comp = GuideCompiler.CompileAll(Path.Combine(root, "guides-src"), addOnDir, false);
             var combos = LoadCombos(addOnDir);
-            var talents = LoadTalents(addOnDir);
-            var builds = CheckBuilds(addOnDir, talents);
             var v = Run(root, addOnDir);
             var sb = new StringBuilder();
-            sb.AppendLine("# TBCGuide coverage report");
+            sb.AppendLine("# ForeverGuide coverage report");
             sb.AppendLine();
-            sb.AppendLine("Generated by `tools/build.ps1 report` from the actual guide sources, compiled data and talent files.");
-            sb.AppendLine("It reports what the automated checks found. It is **not** evidence of in-game testing: none of this has been run in the game client.");
-            sb.AppendLine();
-            sb.AppendLine("## Summary");
+            sb.AppendLine("Generated by `tools/build.ps1 report` from the guide sources and add-on files. It reports what the automated checks found.");
+            sb.AppendLine("It is **not** evidence of in-game testing: nothing here has run in a WoW Forever client.");
             sb.AppendLine();
             sb.AppendLine("| Item | Count |");
             sb.AppendLine("|---|---|");
-            sb.AppendLine("| Guides | " + comp.Guides.Count + " (" + comp.Guides.Count(g => g.Chapter == "Azeroth") + " Azeroth, " + comp.Guides.Count(g => g.Chapter == "Outland") + " Outland) |");
-            sb.AppendLine("| Guide steps | " + comp.Guides.Sum(g => g.Steps.Count) + " |");
-            int qsteps = comp.Guides.Sum(g => g.Steps.Count(s => s.Quest > 0));
-            sb.AppendLine("| Quest steps (accept/complete/turn-in) | " + qsteps + " |");
+            sb.AppendLine("| Guides | " + comp.Guides.Count + " (" + comp.Guides.Count(g => g.Status == "verified") + " verified, " + comp.Guides.Count(g => g.Status == "placeholder" || g.Status == "blocked") + " placeholder/blocked) |");
+            sb.AppendLine("| Guide steps | " + comp.Guides.Sum(g => g.Steps.Count) + " (" + comp.Guides.Sum(g => g.Steps.Count(s => s.Kind == "pending")) + " pending) |");
             sb.AppendLine("| Distinct quests referenced | " + comp.Guides.SelectMany(g => g.Steps).Where(s => s.Quest > 0).Select(s => s.Quest).Distinct().Count() + " |");
-            sb.AppendLine("| Steps with database-derived coordinates | " + comp.Guides.Sum(g => g.Steps.Count(s => s.X >= 0 && s.Verified)) + " |");
-            sb.AppendLine("| Steps with hand-written coordinates (unverified) | " + comp.Guides.Sum(g => g.Steps.Count(s => s.X >= 0 && !s.Verified)) + " |");
-            sb.AppendLine("| Race/class combinations | " + combos.Count + " |");
-            sb.AppendLine("| Talent builds | " + builds.Count + " (" + builds.Count(b => b.Errors.Count == 0) + " pass validation) |");
+            sb.AppendLine("| Race/class combinations (inherited_unverified) | " + combos.Count + " |");
+            sb.AppendLine("| Quest database records | " + comp.Db.Quests.Count + " |");
             sb.AppendLine("| Validation | " + v.Summary + " |");
-            sb.AppendLine("| Compiler warnings | " + comp.Warnings.Count + " (see docs/generated/guide-warnings.log) |");
-            sb.AppendLine();
-            sb.AppendLine("## Race/class routes (level 1 to 70)");
-            sb.AppendLine();
-            sb.AppendLine("Each race/class combination is followed from its racial start guide through the `@next` chain.");
-            sb.AppendLine();
-            sb.AppendLine("| Race | Class | Faction | Guides | Reaches | Problems |");
-            sb.AppendLine("|---|---|---|---|---|---|");
-            foreach (var c in combos.OrderBy(x => x.Item3).ThenBy(x => x.Item1).ThenBy(x => x.Item2))
-            {
-                var r = Route(comp.Guides, c.Item1, c.Item2, c.Item3);
-                sb.AppendLine(string.Format("| {0} | {1} | {2} | {3} | {4} | {5} |", c.Item1, c.Item2, c.Item3, r.Guides.Count, r.ReachedLevel, r.Problems.Count == 0 ? "none" : string.Join("; ", r.Problems.ToArray())));
-            }
             sb.AppendLine();
             sb.AppendLine("## Guides");
             sb.AppendLine();
-            sb.AppendLine("| Guide | Faction | Levels | Zone | Steps | Quests | Optional/elite/group steps |");
+            sb.AppendLine("| Guide | Faction | Status | Levels | Zone | Steps | Pending |");
             sb.AppendLine("|---|---|---|---|---|---|---|");
-            foreach (var g in comp.Guides.OrderBy(g => g.Chapter == "Outland").ThenBy(g => g.MinLevel).ThenBy(g => g.Faction))
+            foreach (var g in comp.Guides.OrderBy(g => g.Faction).ThenBy(g => g.MinLevel))
+                sb.AppendLine(string.Format("| {0} | {1} | {2} | {3} | {4} | {5} | {6} |", g.Name, g.Faction, g.Status,
+                    g.LevelsUnknown ? "pending" : g.MinLevel + "-" + g.MaxLevel, g.ZoneUnknown ? "pending" : g.ZoneName,
+                    g.Steps.Count, g.Steps.Count(s => s.Kind == "pending")));
+            sb.AppendLine();
+            sb.AppendLine("## Release blockers");
+            sb.AppendLine();
+            var blockers = ReleaseBlockers(addOnDir);
+            if (blockers.Count == 0) sb.AppendLine("None detected by the automated checks.");
+            foreach (var b in blockers) sb.AppendLine("- " + b);
+            sb.AppendLine();
+            sb.AppendLine("See docs/PLACEHOLDERS.md for every open item and docs/COMPATIBILITY.md for the evidence log.");
+            File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));
+            WritePlaceholderReport(addOnDir, Path.Combine(Path.GetDirectoryName(path), "PLACEHOLDERS.md"), comp);
+        }
+
+        // docs/PLACEHOLDERS.md, generated from Config/Placeholders.lua (the single source of truth).
+        public static void WritePlaceholderReport(string addOnDir, string path, CompileResult comp)
+        {
+            var text = File.ReadAllText(Path.Combine(addOnDir, "Config", "Placeholders.lua"));
+            int open = text.IndexOf("ns.Placeholders = {", StringComparison.Ordinal);
+            int brace = text.IndexOf('{', open);
+            var list = LuaLiteralReader.ParseValue(text.Substring(brace, MatchBrace(text, brace) - brace + 1), "Placeholders.lua") as LTable;
+            var sb = new StringBuilder();
+            sb.AppendLine("# Placeholder registry");
+            sb.AppendLine();
+            sb.AppendLine("GENERATED by `tools/build.ps1 report` from `ForeverGuide/Config/Placeholders.lua`. Edit that file, not this one.");
+            sb.AppendLine("Each entry is something ForeverGuide does not know yet about WoW Forever. Search the repository for an id to find every record it affects.");
+            sb.AppendLine();
+            sb.AppendLine("| Id | Area | Status | Missing | Why unknown | Expected type | Affects | Evidence needed | Guide steps |");
+            sb.AppendLine("|---|---|---|---|---|---|---|---|---|");
+            foreach (var kv in list.Pairs())
             {
-                sb.AppendLine(string.Format("| {0} | {1} | {2}-{3} | {4} | {5} | {6} | {7} |", g.Name, g.Faction, g.MinLevel, g.MaxLevel, g.ZoneName,
-                    g.Steps.Count, g.Steps.Where(s => s.Quest > 0).Select(s => s.Quest).Distinct().Count(),
-                    g.Steps.Count(s => s.Optional || s.Elite || s.Group >= 0)));
+                var e = kv.Value as LTable;
+                if (e == null) continue;
+                string id = e.Get("id") as string;
+                int steps = comp.Guides.Sum(g => g.Steps.Count(s => s.Ph == id));
+                Func<string, string> f = k => ((e.Get(k) as string) ?? "").Replace("|", "\\|");
+                sb.AppendLine(string.Format("| {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} | {8} |", id, f("area"), f("status"),
+                    f("missing"), f("why"), f("type"), f("affects"), f("evidence"), steps));
             }
-            sb.AppendLine();
-            sb.AppendLine("### Zones covered");
-            sb.AppendLine();
-            var az = comp.Guides.Where(g => g.Chapter == "Azeroth").Select(g => g.ZoneName).Distinct().OrderBy(x => x).ToList();
-            var ol = comp.Guides.Where(g => g.Chapter == "Outland").Select(g => g.ZoneName).Distinct().OrderBy(x => x).ToList();
-            sb.AppendLine("- **Azeroth (" + az.Count + "):** " + string.Join(", ", az.ToArray()));
-            sb.AppendLine("- **Outland (" + ol.Count + "):** " + string.Join(", ", ol.ToArray()));
-            sb.AppendLine();
-            sb.AppendLine("## Talent builds");
-            sb.AppendLine();
-            sb.AppendLine("| Class | Build | Kind | Role | Points (trees) | Validation |");
-            sb.AppendLine("|---|---|---|---|---|---|");
-            foreach (var b in builds.OrderBy(b => b.Class).ThenBy(b => b.Kind))
-                sb.AppendLine(string.Format("| {0} | {1} | {2} | {3} | {4} ({5}/{6}/{7}) | {8} |", b.Class, b.Name, b.Kind, b.Role, b.Points, b.PerTab[0], b.PerTab[1], b.PerTab[2], b.Errors.Count == 0 ? "pass" : string.Join("; ", b.Errors.ToArray())));
-            sb.AppendLine();
-            sb.AppendLine("## Data awaiting verification");
-            sb.AppendLine();
-            sb.AppendLine("- Guide **routes, ordering and notes** are original and were written without in-game testing. Quest ids, names, faction/race/class limits and NPC coordinates come from the database, but the practical route (XP sufficiency, travel efficiency) needs play-testing.");
-            sb.AppendLine("- **" + comp.Warnings.Count(w => w.Contains("no objective locations")) + " complete-steps** have no objective location in the data (escort, talk or event quests). The arrow cannot target them; the step text still shows the objective.");
-            sb.AppendLine("- **" + comp.Warnings.Count(w => w.Contains("prerequisite")) + " prerequisite warnings**: a quest's prerequisite is not turned in on the route (usually an alternative chain). The engine auto-skips unavailable quests at runtime.");
-            sb.AppendLine("- **Class advice** text (Classes/ClassAdvice.lua) is marked unverified. Ability training levels are from developer knowledge.");
-            sb.AppendLine("- **Talent builds** are legal against the 2.5.6 client tables, but how good they are is a judgement call, not something tested.");
-            sb.AppendLine();
-            sb.AppendLine("## Known compatibility limitations");
-            sb.AppendLine();
-            sb.AppendLine("See docs/KNOWN_LIMITATIONS.md and docs/COMPATIBILITY.md.");
             File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));
         }
     }

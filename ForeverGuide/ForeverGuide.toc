@@ -1,0 +1,71 @@
+## Interface: 16001
+## Title: ForeverGuide
+## Notes: Leveling guide framework for WoW Forever, adapted from TBCGuide. Route data pending launch. GPL-3.0.
+## Author: GREYsaurus
+## Version: 0.1.0-pre
+## Category: Quests
+## SavedVariables: ForeverGuideDB
+## SavedVariablesPerCharacter: ForeverGuideCharDB
+## OptionalDeps: TomTom
+## X-License: GPL-3.0-only
+## X-Target: WoW Forever (Retail 12.1.5 base)
+## X-Interface-Status: BLOCKED - 16001 is the documented Forever Beta/Test value; the release value is unverified (PH-PLATFORM-INTERFACE)
+## X-Based-On: TBCGuide 0.5.0 (https://github.com/GREYsaurus/TBCGuide @ 536d86c)
+
+# Core
+Core\Init.lua
+Config\Target.lua
+Config\Placeholders.lua
+Compat\Compat.lua
+Core\SavedVars.lua
+Core\Profiles.lua
+
+# Quest database adapter. No WoW Forever data files ship yet (PH-DATA-QUESTDB): every lookup returns nil.
+Database\Schema.lua
+Database\RaceClass.lua
+Database\Overrides.lua
+Database\EscortQuests.lua
+Database\QuestDB.lua
+
+# Guides (generated from guides-src/*.guide by tools/build.ps1 guides)
+Guides\Registry.lua
+Guides\Compiled\Guides.xml
+
+# Classes and talents (talent data: PH-TALENTS-SYSTEM, none shipped)
+Classes\ClassAdvice.lua
+Talents\Talents.lua
+
+# Gear scoring (TBC research, inherited_unverified: PH-GEAR-WEIGHTS)
+Gear\Profiles.lua
+Gear\Gear.lua
+
+# Engine
+Core\QuestTracker.lua
+Core\Selector.lua
+Core\Engine.lua
+Core\StepText.lua
+Core\Navigation.lua
+Core\Vendor.lua
+Core\QuestAuto.lua
+Core\Orphans.lua
+Core\Marker.lua
+Core\Assist.lua
+
+# UI
+UI\Widgets.lua
+UI\MainFrame.lua
+UI\Browser.lua
+UI\TalentFrame.lua
+UI\Options.lua
+UI\Config.lua
+UI\ConfigOptions.lua
+UI\MinimapButton.lua
+UI\AutomationOptions.lua
+UI\OrphanFrame.lua
+UI\MarkerBar.lua
+UI\GearUI.lua
+
+# Commands, diagnostics, start-up
+Core\Commands.lua
+Core\Diagnostics.lua
+Core\Boot.lua

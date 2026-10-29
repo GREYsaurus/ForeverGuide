@@ -1,78 +1,61 @@
-# Client compatibility
+# Client compatibility and evidence log
+
+Every consequential platform decision, with its evidence class:
+
+- **verified_source**: read in ForeverGuide/TBCGuide source code.
+- **verified_docs**: stated by documentation that was read (date given).
+- **verified_runtime**: observed in a running WoW Forever client. **Nothing is in this class yet.**
+- **unverified**: an assumption, kept behind a capability check.
+- **blocked**: cannot be decided until the information exists.
+
+Headless tests use mocks modelled on the documentation below. Passing tests do **not** prove in-client behaviour.
 
 ## Target
 
-| | Value | How established |
-|---|---|---|
-| Game | World of Warcraft: The Burning Crusade Classic, **Anniversary realms** (TBC pre-patch 2026-01-13, launch 2026-02-05) | public news coverage |
-| Client build | **2.5.6.70577** | wago.tools build list, product `wow_anniversary` (checked 2026-10-28) |
-| TOC interface | **20506** | Questie `bundle/v12.3.1` `release.json` (flavor `bcc`, interface 20506); RestedXP's `RXPGuides_TBC.toc` also uses 20506 |
-| Lua | 5.1 (WoW embedded) | standard for all WoW clients |
-| Races | 10 (incl. Draenei, Blood Elf), 52 race/class combinations | client `CharBaseInfo` table, build 2.5.6.70577 |
-| Talents | 3 trees per class, 61 points at 70 (first at 10) | client `Talent`/`TalentTab` tables |
+| Item | Value | Evidence | Class |
+|---|---|---|---|
+| Product | World of Warcraft: Forever, a separate permanent branch alongside Retail and Classic. Launch 2026-11-04 00:00 UTC, beta ended 2026-09-17. | warcraft.wiki.gg "World of Warcraft: Forever" (read 2026-10-29) | verified_docs |
+| Client base | Retail **12.1.5** (build 69952). Forever 1.60.1 build 70205 is diffed against it: 176 global API functions added, 10 removed. | warcraft.wiki.gg "Patch 1.60.1/API changes" (read 2026-10-29) | verified_docs |
+| TOC game type | `forever` (equivalent to `camelot`). TOC suffixes `_Forever.toc` and `_Camelot.toc`. Family suffix `_Mainline.toc`. | same page; warcraft.wiki.gg "TOC format" | verified_docs |
+| TOC interface | **16001** for Forever Beta/Test. **Release value not listed.** | warcraft.wiki.gg "TOC format" | **blocked** (PH-PLATFORM-INTERFACE) |
+| Release build number | unknown (beta builds 1.60.1.70205 / 70291; a fan site names 70450) | — | placeholder (PH-PLATFORM-BUILD) |
+| Lua | 5.1 (every WoW client embeds Lua 5.1) | general WoW add-on knowledge; nothing Forever-specific contradicts it | unverified |
+| Level cap | 60, "no planned increases" | warcraft.wiki.gg "World of Warcraft: Forever" | verified_docs, not runtime (PH-RULES-LEVELCAP) |
+| Races | Alliance Human, Dwarf, Gnome, Night Elf; Horde Orc, Tauren, Troll, Undead; Skyborne (new, both factions). Races from TBC or later are not playable. | same page | verified_docs. Race/class combinations: inherited_unverified (PH-RACECLASS-COMBOS). Skyborne token: placeholder (PH-RACE-SKYBORNE). |
+| Classes | the nine original classes | same page | verified_docs |
+| Install folder | `_forever_\Interface\AddOns` | third-party guides only | placeholder (PH-PLATFORM-ADDONFOLDER) |
+| SavedVariables reload | One third-party beta report says SavedVariables were written but not read back. | timesaver.gg blog (single report, not acknowledged by Blizzard) | placeholder (PH-PLATFORM-SAVEDVARS) |
 
-All of this lives in `TBCGuide/Config/Target.lua`. Older 2.5.x builds (e.g. original TBC Classic 2.5.4, interface 20504) are **not** claimed to work. The add-on warns if the interface is outside 20500-20599.
+**Decision: ship `ForeverGuide.toc` with `## Interface: 16001`, marked `## X-Interface-Status: BLOCKED`.** A TOC is
+needed for in-client testing. The release value is unknown, so `tools/build.ps1 package` refuses to build while the
+flag is set. `Config/Target.lua` warns in chat when the client reports any other interface number. The plain
+`ForeverGuide.toc` name loads on every flavor. Once the release value is known, a `_Forever.toc` can be added if
+other flavors need to be excluded.
 
-## API usage and fallbacks
+## API decisions (all behind `ForeverGuide/Compat/Compat.lua`)
 
-Every API is reached through `Compat/Compat.lua` and listed with its status in `tools/wow_api_allowlist.txt`. Summary:
+Retail 12.1.5 removed the Classic quest-log globals. So for each feature, ForeverGuide prefers the documented Retail
+form and keeps TBCGuide's Classic form as a fallback. Every call is nil-checked, and a missing API leaves
+`ns.Compat.missing` set (`/fguide debug api`).
 
-| Feature | APIs | If missing |
-|---|---|---|
-| Quest completion | `C_QuestLog.IsQuestFlaggedCompleted` / `IsQuestFlaggedCompleted` / `GetQuestsCompleted` | next fallback in turn; ultimately manual |
-| Quest log | `GetQuestLogTitle` (8th return = questID), `GetNumQuestLeaderBoards`, `GetQuestLogLeaderBoard` | `C_QuestLog.GetQuestIDForLogIndex` for the id; otherwise manual |
-| Events | `QUEST_ACCEPTED`, `QUEST_TURNED_IN`, `QUEST_LOG_UPDATE`, `QUEST_REMOVED`, `UNIT_QUEST_LOG_CHANGED` | registration is pcall-guarded; periodic rescans still work |
-| Position | `C_Map.GetBestMapForUnit`, `C_Map.GetPlayerMapPosition`, `C_Map.GetWorldPosFromMapPos`, `GetPlayerFacing` | arrow shows plain coordinates |
-| Map pin | `WorldMapFrame:GetCanvas()`, `:GetMapID()`, `OnMapChanged` | pin hidden |
-| Talents | `GetTalentInfo`, `GetTalentTabInfo`, `GetNumTalents`, `UnitCharacterPoints` | calculator works in simulated mode only |
-| Options | `Settings.RegisterCanvasLayoutCategory` or `InterfaceOptions_AddCategory` | `/tbcg set <opt> on|off` |
-| Frames | `BackdropTemplate` for `SetBackdrop` | panels without backdrops |
+| Feature | Preferred (Retail form) | Fallback (TBCGuide form) | If both missing | Class |
+|---|---|---|---|---|
+| Quest log scan | `C_QuestLog.GetNumQuestLogEntries`, `GetInfo`, `GetQuestObjectives`, `IsComplete`, `IsFailed` | `GetQuestLogTitle`, `GetQuestLogLeaderBoard` | empty log; steps stay manual | unverified (PH-API-QUESTLOG) |
+| Quest completion | `C_QuestLog.IsQuestFlaggedCompleted` | `IsQuestFlaggedCompleted`, `GetQuestsCompleted` | false (manual) | unverified |
+| Quest log capacity | `C_QuestLog.GetMaxNumQuestsCanAccept` | `MAX_QUESTLOG_QUESTS`, then `Target.questLogMax` (nil) | **no log-full check** (no TBC default of 25) | unverified (PH-RULES-QUESTLOG) |
+| Abandon | `C_QuestLog.SetSelectedQuest/SetAbandonQuest/AbandonQuest` (quest ID re-checked) | `SelectQuestLogEntry/SetAbandonQuest/AbandonQuest` | refused | unverified |
+| Grey-quest check | `GetQuestGreenRange` | — | no grey decision (TBC default 8 removed) | unverified (PH-RULES-GREYRANGE) |
+| Gossip / greeting / quest panels | `C_GossipInfo.*` (quest IDs), `GetQuestID`, `AcceptQuest`, `CompleteQuest`, `GetQuestReward` | legacy `Gossip*` globals | manual | unverified |
+| Bags / items | `C_Container.*`, `C_Item.GetItemInfo` | legacy globals | junk selling inert | unverified |
+| Map / arrow | `C_Map.*`, `CreateVector2D`, `GetPlayerFacing` | — | plain coordinates | unverified. Map IDs are a placeholder (PH-API-MAPIDS), so no shipped step has coordinates. |
+| Raid markers | `SetRaidTarget` via pcall; `ADDON_ACTION_BLOCKED` detection | secure marker-bar buttons | marking off, bar remains | unverified. Retail 12.0 made `SetRaidTarget` secure-only and Forever is 12.1.5-based, so expect the fallback (PH-API-RAIDTARGET). |
+| Talents | — | `GetTalentInfo` and friends (TBC) | calculator shows "Pending WoW Forever data" | **blocked** (PH-API-TALENTS, PH-TALENTS-SYSTEM) |
+| Options panel | `Settings.RegisterCanvasLayoutCategory` | `InterfaceOptions_AddCategory` | `/fguide set` | unverified |
+| Orphaned-quest button | `QuestLogFrame` (Classic frame) | — | button skipped; `/fguide orphans` still works | unverified. Retail uses `QuestMapFrame`, so the button is likely absent. |
+| TomTom | `TomTom.AddWaypoint` | — | built-in arrow only | unverified (PH-INT-TOMTOM) |
 
-## In-game verification checklist
+No external automation, memory access, injection or restriction bypass is used. Only the documented in-game add-on API is called.
 
-None of these have been done yet. Tick them off on a real client:
+## In-game verification
 
-- [ ] Add-on loads with no Lua errors (`/console scriptErrors 1`). `/tbcg debug errors` is empty.
-- [ ] `/tbcg debug api`: every listed API reports `yes` (or the fallback works).
-- [ ] `/tbcg debug talents`: **0 data mismatches** for your class (talent tier/column/rank mapping is correct).
-- [ ] A new character of each race gets its own start guide automatically.
-- [ ] Accepting, completing and turning in quests advances steps automatically.
-- [ ] `/reload` and logout/login keep the guide and step.
-- [ ] Left-click / right-click on steps marks done or skips; `/tbcg prev` reopens a step.
-- [ ] Arrow points the right way, shows distance, and turns green on arrival. Check the world-map pin is placed correctly.
-- [ ] With TomTom installed, waypoints appear in TomTom.
-- [ ] `fp`, `bind`, `train` and `hs` steps complete as described in docs/GUIDE_FORMAT.md.
-- [ ] Talent window: tooltips show the right spell text, the simulation obeys tier and prereq rules, and live mode shows your talents.
-- [ ] Options panel appears under Interface > AddOns and the settings persist.
-- [ ] A boosted or high-level character (e.g. level 58) gets an appropriate guide (Hellfire).
-- [ ] Draenei and Blood Elf routes: Azuremyst to Bloodmyst to Ashenvale, and Eversong to Ghostlands to Barrens.
-
-### 0.2.0 automation (see docs/AUTOMATION.md)
-
-- [ ] `/tbcg debug api`: the automation APIs (C_Container, C_GossipInfo, GetQuestID, AcceptQuest, GetNumQuestChoices, ...) report `yes`.
-- [ ] Gossip NPC with several guide quests: completed ones are turned in first, then each guide quest is accepted, with "Accepted:" printed only after it appears in the log.
-- [ ] A quest-giver with the plain greeting window (no gossip) behaves the same.
-- [ ] An unrelated quest at the same NPC is **not** accepted.
-- [ ] An escort quest in the guide (e.g. *Protecting the Shipment*, *Rescue OOX-17/TN!*, Horde *Free From the Hold*) is **not** accepted, and the chat message says why. A party member starting an escort: the confirmation is left to you.
-- [ ] A turn-in with **several rewards** stays open with "Choose your reward". No reward is picked. After you pick one, the guide advances.
-- [ ] A turn-in with no reward or a single reward completes automatically.
-- [ ] Holding Shift while talking to an NPC disables automation for that conversation.
-- [ ] With a full quest log (25), a guide quest is not accepted and the message says the log is full.
-- [ ] Junk selling OFF (default): opening a vendor sells nothing.
-- [ ] Junk selling ON: grey items are sold. Grey items needed by a quest in your log, protected items and protected categories stay. The summary's copper matches the money gained.
-- [ ] Quest log window: the **Orphaned (N)** button is visible and not overlapping anything. The list matches expectations. **Abandon** asks for confirmation and removes only the ticked quests.
-- [ ] *Maximum-speed route* (Interface > AddOns > TBCGuide) hides optional steps; turning it off restores them.
-
-### 0.3.0 raid markers (see docs/RAID_MARKERS.md)
-
-- [ ] `/tbcg debug api`: `SetRaidTarget`, `GetRaidTargetIndex` and `UnitGUID` report `yes`.
-- [ ] No target: `/tbcg mark skull` prints "You have no target to mark." with no Lua error.
-- [ ] Solo: `/tbcg mark skull` puts a skull on your target (check the target frame and the world), and "Marked ..." is printed. `/tbcg unmark` removes it. Marking the same icon twice leaves it on.
-- [ ] In a party, as any member: marking works. In a raid without assist: it is refused with a reason. As raid assistant or leader: it works.
-- [ ] Orc/Troll, Durotar step *Sarkoth*: targeting Sarkoth puts a skull on him automatically (once). Other scorpids are not marked.
-- [ ] Change that skull by hand: TBCGuide does not put it back, and does not mark another Sarkoth in the same step.
-- [ ] A mob that already has an icon is not re-marked (default `markReplace` off).
-- [ ] Advancing the step removes TBCGuide's skull but not icons you set yourself.
-- [ ] In combat: marking by command and by the marker bar works. `/tbcg markbar` toggling is refused in combat.
-- [ ] Marker bar buttons mark and clear your target. If the client ever blocks addon marking, the chat message says so and the bar still works.
-- [ ] Raid marker settings page appears under TBCGuide, and changes persist after `/reload`.
+See `docs/SMOKE_TEST.md`. None of it has been run: no WoW Forever client was available during the adaptation.

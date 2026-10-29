@@ -1,5 +1,12 @@
 # Data pipeline: refreshing the bundled database and talent data
 
+> **ForeverGuide: DISABLED.** This pipeline imports TBCGuide's pinned **TBC Classic** sources (QuestieDB TBC tables,
+> `wow_anniversary` client tables), which do not describe WoW Forever. `tools/upstream.json` has `"disabled": true`,
+> and `fetch`, `import-questie` and `import-client` refuse to run. To use it for Forever, pin a verified Forever source
+> whose licence allows GPL redistribution, point the importer at it, write the output to `ForeverGuide/Database/Data/`
+> (the compiler reads that folder), then set `disabled` to false (`docs/LAUNCH_CHECKLIST.md`, step 2). The description
+> below is TBCGuide's, kept for reference.
+
 Players never run any of this. The released add-on already contains the generated files.
 
 ```
