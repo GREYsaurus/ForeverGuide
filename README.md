@@ -1,3 +1,17 @@
+# ForeverGuide has been retired
+
+ForeverGuide is no longer maintained. Development has moved to [Questwarden](https://github.com/GREYsaurus/Questwarden), the successor project encompassing both TBCGuide and ForeverGuide.
+
+Please use Questwarden for current documentation, development, bug reports, and feature requests.
+
+ForeverGuide never had a release: it was a pre-release framework with no verified WoW Forever route data. Do not run ForeverGuide and Questwarden at the same time: both would act on the same quests and NPCs.
+
+This repository is retained for historical reference. The documentation below describes the retired project and may no longer be current.
+
+---
+
+## Legacy documentation
+
 # ForeverGuide
 
 A **free** leveling guide add-on framework for **World of Warcraft: Forever** (working name). It is a faithful adaptation of

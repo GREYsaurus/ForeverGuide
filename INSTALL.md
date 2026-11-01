@@ -1,5 +1,7 @@
 # Installing ForeverGuide
 
+> **ForeverGuide has been retired.** These instructions are kept for historical reference. For a maintained add-on, see [Questwarden](https://github.com/GREYsaurus/Questwarden).
+
 **There is no release.** Release packaging stays blocked until the WoW Forever release interface number is verified
 (`docs/LAUNCH_CHECKLIST.md`, step 1). The steps below are for in-client **testing** only.
 
